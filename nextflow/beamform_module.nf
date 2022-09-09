@@ -12,8 +12,6 @@ params.all = false
 params.summed = false
 params.incoh = false
 params.channels = null
-params.vcstools_version = 'master'
-params.mwa_search_version = 'master'
 
 params.offringa = false
 if ( params.offringa ) {
