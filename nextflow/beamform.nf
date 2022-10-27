@@ -44,6 +44,9 @@ if ( params.help ) {
              |              option.
              |
              |Optional arguments:
+             |  --offringa  For beamforming with a 'offringa' type calibration solution (.bin).  
+             |              Calibration file must be in [obsid]/cal/[calid]/rts with name 
+             |              'calibration_solution.bin'.
              |  --summed    Add this flag if you the beamformer output as summed polarisations
              |              (only Stokes I). This reduces the data size by a factor of 4.
              |              [default: False]
