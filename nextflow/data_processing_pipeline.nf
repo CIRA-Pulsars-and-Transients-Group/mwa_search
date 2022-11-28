@@ -1,13 +1,5 @@
 #!/usr/bin/env nextflow
 
-nextflow.enable.dsl = 2
-
-params.obsid = null
-params.calid = null
-
-params.begin = null
-params.end = null
-params.all = false
 
 params.search_radius = 0.00001
 params.fwhm_deg = null
@@ -15,18 +7,6 @@ params.only_cand_search = false
 params.offset = 0.0
 params.angle_offset = 0.0
 
-params.vcstools_version = 'master'
-params.mwa_search_version = 'master'
-
-params.didir = "${params.scratch_basedir}/${params.obsid}/cal/${params.calid}/rts"
-params.publish_fits = false
-params.publish_fits_scratch = true
-params.publish_all_classifer_cands = false
-
-params.out_dir = "${params.search_dir}/${params.obsid}_candidates"
-
-params.no_combined_check = false
-params.max_gpu_jobs = 24
 
 params.help = false
 if ( params.help ) {
@@ -47,11 +27,7 @@ if ( params.help ) {
              |              Only search for pulsar candidates (no known pulsar processing
              |              [default: False]
              |  --publish_fits
-             |              Publish to the fits directory (/group on Galaxy). Use this instead
-             |              of --publish_fits_scratch
-             |  --publish_fits_scratch
-             |              Publish to the scratch fits directory (/astro on Galaxy). Include
-             |              this option.
+             |              Publish to the fits directory (/astro on Galaxy).
              |  --vcstools_version
              |              The vcstools module version to use [default: master]
              |  --mwa_search_version

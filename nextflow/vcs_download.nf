@@ -1,14 +1,6 @@
 #!/usr/bin/env nextflow
 
-nextflow.enable.dsl = 2
 
-params.obsid = 'no_obsid'
-
-params.begin = null
-params.end = null
-params.all = false
-
-params.no_combined_check = true
 params.ozstar_transfer = false
 
 params.increment = 32
@@ -17,11 +9,7 @@ params.untar_jobs = 2
 params.keep_tarball = false
 params.keep_raw = false
 params.max_jobs = 12
-
 params.download_dir = null
-
-params.vcstools_version = 'master'
-params.mwa_voltage_version = 'master'
 
 if ( params.keep_tarball ) {
     keep_tarball_command = "-k"
@@ -212,7 +200,7 @@ process untar {
 }
 
 process recombine {
-    label 'cpu_large_mem'
+    label 'cpu'
     memory {"${begin_time_increment[1] * 5} GB"}
     time { "${500*params.increment*task.attempt + 900}s" }
     errorStrategy { task.attempt > 3 ? 'finish' : 'retry' }

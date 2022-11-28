@@ -1,22 +1,5 @@
 #!/usr/bin/env nextflow
 
-nextflow.enable.dsl = 2
-
-params.obsid = null
-params.calid = null
-
-params.begin = null
-params.end = null
-params.all = false
-
-params.summed = false
-params.channels = null
-params.vcstools_version = 'master'
-params.mwa_search_version = 'master'
-
-params.didir = "${params.scratch_basedir}/${params.obsid}/cal/${params.calid}/rts"
-
-params.no_combined_check = false
 
 params.help = false
 if ( params.help ) {
@@ -163,7 +146,7 @@ process make_beam_ipfb {
     errorStrategy 'retry'
     maxRetries 1
     maxForks 12
-    
+
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
         clusterOptions = "--gres=gpu:1  --tmp=${temp_mem_single}GB"
         scratch '$JOBFS'
@@ -195,7 +178,7 @@ process make_beam_ipfb {
 
     output:
     file "make_beam*txt"
-    
+
     """
     make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
 -f ${channel_pair[0]} -J ${params.didir}/DI_JonesMatrices_node${channel_pair[1]}.dat \
@@ -258,7 +241,7 @@ process calc_beamformer_benchmarks {
 
     output:
     stdout()
-    
+
     """
     calc_beamformer_benchmarks.py --max_pointing_num ${bench_max_pointings}
     """

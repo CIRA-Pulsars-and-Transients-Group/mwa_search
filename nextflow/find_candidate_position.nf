@@ -1,30 +1,8 @@
 #!/usr/bin/env nextflow
 
-nextflow.enable.dsl = 2
-
-params.obsid = null
-params.calid = null
-params.pointings = null
-params.pointing_file = null
-params.begin = 0
-params.end = 0
-params.all = false
-
 params.pointing_grid = null
 params.fraction = 0.8
 params.loops = 1
-
-params.summed = true
-params.channels = null
-params.vcstools_version = 'master'
-params.mwa_search_version = 'master'
-
-params.bins = 128
-params.subint = 60
-params.nchan = 48
-params.pulsar = 0
-params.period = 0.90004
-params.dm = 23.123
 
 params.no_pdmp = false
 params.fwhm_ra = "None"
@@ -81,8 +59,6 @@ if ( params.help ) {
              |              vdif files [default: false]
              |  --publish_fits
              |              Publish to the fits directory (/group on Galaxy).
-             |  --publish_fits_scratch
-             |              Publish to the scratch fits directory (/astro on Galaxy).
              |  --vcstools_version
              |              The vcstools module version to use [default: master]
              |  --mwa_search_version

@@ -1,28 +1,5 @@
 #!/usr/bin/env nextflow
 
-nextflow.enable.dsl = 2
-
-params.obsid = null
-params.calid = null
-params.pointings = null
-params.pointing_file = null
-
-params.begin = null
-params.end = null
-params.all = false
-
-params.summed = false
-params.channels = null
-params.ipfb = false
-params.vcstools_version = 'master'
-params.mwa_search_version = 'master'
-
-params.didir = "${params.scratch_basedir}/${params.obsid}/cal/${params.calid}/rts"
-params.publish_fits = false
-params.publish_fits_scratch = true
-
-params.no_combined_check = false
-
 params.help = false
 if ( params.help ) {
     help = """beamform.nf: A pipeline that will beamform and splice on all input pointings.
@@ -49,9 +26,9 @@ if ( params.help ) {
              |              [default: False]
              |  --ipfb      Perform an the inverse PFB to produce high time resolution beamformed
              |              vdif files [default: false]
-             |  --publish_fits_scratch
+             |  --publish_fits
              |              Publish to the scratch fits directory (/astro on Galaxy). Use this
-             |              instead of --publish_fits_scratch
+             |              instead of --publish_fits
              |  --vcstools_version
              |              The vcstools module version to use [default: master]
              |  --mwa_search_version

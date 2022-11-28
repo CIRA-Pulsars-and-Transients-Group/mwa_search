@@ -1,25 +1,5 @@
 #!/usr/bin/env nextflow
 
-nextflow.enable.dsl = 2
-
-params.obsid = null
-params.fits_file = null
-params.out_dir = "${params.search_dir}/${params.obsid}_candidates"
-
-params.dm_min = 1
-params.dm_max = 250
-params.dm_min_step = 0.02
-params.dm_max_step = 0.5
-params.max_dms_per_job = 5000
-
-params.cand = "Blind"
-params.sp = false
-
-//Defaults for the accelsearch command
-params.nharm = 16 // number of harmonics to search
-params.min_period = 0.001 // min period to search for in sec (ANTF min = 0.0013)
-params.max_period = 30 // max period to search for in sec  (ANTF max = 23.5)
-params.zmax = 0 // don't do an accelsearch by default
 
 params.help = false
 if ( params.help ) {

@@ -1,30 +1,3 @@
-nextflow.enable.dsl = 2
-
-
-params.obsid = null
-params.pointings = null
-params.calid = null
-
-params.begin = 0
-params.end = 0
-params.all = false
-
-params.summed = false
-params.incoh = false
-params.channels = null
-
-params.offringa = false
-if ( params.offringa ) {
-    params.didir = "${params.scratch_basedir}/${params.obsid}/cal/${params.calid}/offringa"
-}
-else {
-    params.didir = "${params.scratch_basedir}/${params.obsid}/cal/${params.calid}/rts"
-}
-params.publish_fits = false
-params.publish_fits_scratch = false
-
-params.no_combined_check = false
-
 //Calculate the max pointings used in the launched jobs
 if ( params.pointings ) {
     max_job_pointings = params.pointings.split(",").size()
@@ -103,10 +76,7 @@ process beamform_setup {
         spamwriter.writerow([beg, end])
 
     # Find the channels
-    if "$params.channels" == "null":
-        channels = get_channels($params.obsid)
-    else:
-        channels = [$params.channels]
+    channels = get_channels($params.obsid)
     # Reorder channels to handle the order switch at 128
     channels = np.array(channels, dtype=np.int)
     hichans = [c for c in channels if c>128]
@@ -226,8 +196,6 @@ ${bf_out} -t 6000 -F ${params.didir}/flagged_tiles.txt  -z $utc
 process make_beam_ipfb {
     publishDir "${params.basedir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*hdr"
     publishDir "${params.basedir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*vdif"
-    publishDir "${params.scratch_basedir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits_scratch, pattern: "*hdr"
-    publishDir "${params.scratch_basedir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits_scratch, pattern: "*vdif"
 
     label 'gpu'
     //time '2h'
@@ -284,9 +252,6 @@ process make_beam_ipfb {
     if $params.publish_fits; then
         mkdir -p -m 771 ${params.basedir}/${params.obsid}/pointings/${point}
     fi
-    if $params.publish_fits_scratch; then
-        mkdir -p -m 771 ${params.scratch_basedir}/${params.obsid}/pointings/${point}
-    fi
 
     make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
 -f ${channel_pair[0]} \${jones_option} \
@@ -300,7 +265,6 @@ process make_beam_ipfb {
 
 process splice {
     publishDir "${params.basedir}/${params.obsid}/pointings/${unspliced[0].baseName.split("_")[2]}_${unspliced[0].baseName.split("_")[3]}", mode: 'copy', enabled: params.publish_fits
-    publishDir "${params.scratch_basedir}/${params.obsid}/pointings/${unspliced[0].baseName.split("_")[2]}_${unspliced[0].baseName.split("_")[3]}", mode: 'copy', enabled: params.publish_fits_scratch
     label 'cpu'
     time '3h'
     maxForks 300

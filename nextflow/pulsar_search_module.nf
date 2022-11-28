@@ -1,32 +1,8 @@
-nextflow.enable.dsl = 2
-
-params.out_dir = "${params.search_dir}/${params.obsid}_candidates"
-
-params.vcstools_version = 'master'
-params.mwa_search_version = 'master'
-params.publish_all_prepfold = false
-
-params.begin = 0
-params.end = 0
-params.all = false
-
-params.dm_min = 1
-params.dm_max = 250
-params.dm_min_step = 0.02
-params.dm_max_step = 0.5
-params.max_dms_per_job = 5000
-
-//Defaults for the accelsearch command
-params.nharm = 16 // number of harmonics to search
-params.min_period = 0.001 // min period to search for in sec (ANTF min = 0.0013)
-params.max_period = 30 // max period to search for in sec  (ANTF max = 23.5)
-params.zmax = 0
-
-//Some math for the accelsearch command
-//convert to freq
+// Some math for the accelsearch command
+// convert to freq
 min_freq = 1 / params.max_period
 max_freq = 1 / params.min_period
-//adjust the freq to include the harmonics
+// adjust the freq to include the harmonics
 min_f_harm = min_freq
 max_f_harm = max_freq * params.nharm
 
@@ -47,27 +23,6 @@ else {
     total_dm_jobs = 24
 }
 
-// Work out some estimated job times
-if ( "$HOSTNAME".startsWith("farnarkle") ) {
-    // In seconds
-    search_dd_fft_acc_dur = obs_length * 5.0
-    prepfold_dur = obs_length * 24.0
-    presto_python_load = "module use ${params.presto_module_dir}; module load presto/${params.presto_module}; module load python/2.7.14; module load matplotlib/2.2.2-python-2.7.14"
-}
-else if ( "$HOSTNAME".startsWith("garrawarla") ) {
-    // In seconds
-    search_dd_fft_acc_dur = obs_length * 5.0
-    prepfold_dur = obs_length * 16.0
-    presto_python_load = ""
-}
-else {
-    search_dd_fft_acc_dur = 14400
-    prepfold_dur = 7200
-    presto_python_load = ""
-}
-if ( params.zmax != 0 ) {
-    search_dd_fft_acc_dur *= 4
-}
 
 process get_centre_freq {
     output:
@@ -254,7 +209,8 @@ process accelsift {
 
 
 process single_pulse_searcher {
-    label 'cpu_large_mem'
+    label 'cpu'
+    label 'large_mem'
     time '2h'
     publishDir params.out_dir, mode: 'copy'
     errorStrategy 'ignore'

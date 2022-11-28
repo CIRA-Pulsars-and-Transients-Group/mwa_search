@@ -1,58 +1,5 @@
 #!/usr/bin/env nextflow
 
-nextflow.enable.dsl = 2
-
-params.obsid = null
-params.calid = null
-params.pointings = null
-params.pointing_file = null
-params.bestprof_pointings = null
-
-params.begin = 0
-params.end = 0
-params.all = false
-
-params.dm_min = 1
-params.dm_max = 250
-params.dm_min_step = 0.02
-params.dm_max_step = 0.5
-params.max_dms_per_job = 5000
-
-params.summed = true
-params.channels = null
-params.vcstools_version = 'master'
-params.mwa_search_version = 'master'
-
-params.didir = "${params.scratch_basedir}/${params.obsid}/cal/${params.calid}/rts"
-params.out_dir = "${params.search_dir}/${params.obsid}_candidates"
-
-params.zmax = 0
-
-params.no_combined_check = false
-
-
-if ( params.max_dms_per_job != 5000 ) {
-    // If using non default max_dms_per_job then use a make the groupTuple size sudo infinite
-    total_dm_jobs = 10000
-}
-// If doing an acceleration search, lower the number of DMs per job so the jobs don't time out
-else if ( params.zmax == 0 ) {
-    // Periodic search defaults
-    total_dm_jobs = 6
-}
-else {
-    // Accel search defaults
-    total_dm_jobs = 24
-    params.max_dms_per_job = 128
-}
-
-if ( params.bestprof_pointings ) {
-    bestprof_files = Channel.fromPath("${params.bestprof_pointings}/*.bestprof").collect()
-}
-else {
-    bestprof_files = Channel.from(" ")
-}
-
 params.help = false
 if ( params.help ) {
     help = """mwa_search_pipeline.nf: A pipeline that will beamform and perform a pulsar search
@@ -103,8 +50,6 @@ if ( params.help ) {
              |              vdif files [default: false]
              |  --publish_fits
              |              Publish to the fits directory (/group on Galaxy).
-             |  --publish_fits_scratch
-             |              Publish to the scratch fits directory (/astro on Galaxy).
              |  --vcstools_version
              |              The vcstools module version to use [default: master]
              |  --mwa_search_version

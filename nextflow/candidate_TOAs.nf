@@ -1,12 +1,8 @@
 #!/usr/bin/env nextflow
 
-nextflow.enable.dsl = 2
-params.no_combined_check = true
 include { pre_beamform; beamform } from './beamform_module'
 
-//params.out_dir = "${params.search_dir}/${params.obsid}_toas"
-//params.out_dir = "${params.search_dir}/psr2_timing/${params.obsid}_toas"
-params.out_dir = "${params.search_dir}/psr2_timing"
+params.out_dir = "${params.search_dir}/timing"
 
 params.bins = 256
 params.period = ""
@@ -49,7 +45,7 @@ if ( params.help ) {
              |              [default: 1]
              |
              |  --eph       The ephermis file to fold on the obs. If you don't have one use --period and --dm
-             |  --period    The topo period of the pulsar in seconds. 
+             |  --period    The topo period of the pulsar in seconds.
              |  --dm        The dispersion measure of the pulsar.
              |
              |  --out_dir   Where the TOAs will be output
@@ -98,7 +94,7 @@ process prepfold_ch {
     output:
     file "*bestprof"
     file fits_files
-    
+
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
         beforeScript "module use ${params.presto_module_dir}; module load presto/${params.presto_module}"
     }
