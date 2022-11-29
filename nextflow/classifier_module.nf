@@ -9,12 +9,12 @@ process feature_extract {
     time '1h'
     errorStrategy 'retry'
     maxRetries 1
-    
+
     input:
-    file pfd_files
+    path pfd_files
 
     output:
-    file "*.arff"
+    path "*.arff"
     path "*pfd*", includeInputs: true
 
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
@@ -38,12 +38,12 @@ process feature_extract {
 process classify {
     input:
     path fex_out
-    file pfd_files
+    path pfd_files
 
     output:
-    file "feature_extraction*"
+    path "feature_extraction*"
     path "*pfd*", includeInputs: true
-    
+
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
         beforeScript "module use $params.module_dir; module load LOTAASClassifier/master"
     }
@@ -72,12 +72,12 @@ process sort_detections {
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_classifer_cands
 
     input:
-    file classifier_files
-    file pfd_files
+    path classifier_files
+    path pfd_files
 
     output:
-    file "positive_detections/*" optional true
-    file "negative_detections/*" optional true
+    path "positive_detections/*" optional true
+    path "negative_detections/*" optional true
 
     if ( "$HOSTNAME".startsWith("x86") || "$HOSTNAME".startsWith("garrawarla") || "$HOSTNAME".startsWith("galaxy") ) {
         container = "file:///${params.containerDir}/lofar_pulsar_ml/lofar_pulsar_ml.sif"

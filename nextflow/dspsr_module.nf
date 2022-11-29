@@ -6,11 +6,11 @@ process pdmp {
     time '6h'
 
     input:
-    file fits
+    path fits
     val pointings
 
     output:
-    file "*pdmp*"
+    path "*pdmp*"
 
     beforeScript "module use ${params.presto_module_dir}; module load dspsr/master"
 

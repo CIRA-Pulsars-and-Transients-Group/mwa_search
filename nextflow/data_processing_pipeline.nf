@@ -54,7 +54,7 @@ process fwhm_calc {
     val channels
 
     output:
-    file "${params.obsid}_fwhm.txt"
+    path "${params.obsid}_fwhm.txt"
 
     """
     #!/usr/bin/env python3
@@ -82,7 +82,7 @@ process find_pointings {
     val fwhm
 
     output:
-    file "${params.obsid}_fov_sources.csv"
+    path "${params.obsid}_fov_sources.csv"
 
     """
     pulsars_in_fov.py -o $params.obsid -b $begin -e $end --fwhm $fwhm --search_radius ${params.search_radius} \

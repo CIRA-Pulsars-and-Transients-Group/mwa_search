@@ -121,7 +121,7 @@ else {
 
 process get_pulsar_ra_dec {
     output:
-    file 'pulsar_ra_dec.txt'
+    path 'pulsar_ra_dec.txt'
 
     """
     #!/usr/bin/env python3
@@ -149,7 +149,7 @@ process grid {
     tuple val(pulsar), val(pointings), val(fwhm)
 
     output:
-    file "*txt"
+    path "*txt"
 
     """
     grid.py -o $params.obsid -d $fwhm -f $params.fraction -p $pointings -l $params.loops --label ${pulsar}
@@ -163,11 +163,11 @@ process prepfold {
     publishDir params.out_dir, mode: 'copy'
 
     input:
-    tuple val(pointing), file(fits_files), val(pulsar)
+    tuple val(pointing), path(fits_files), val(pulsar)
 
     output:
-    file "*bestprof"
-    file "*ps"
+    path "*bestprof"
+    path "*ps"
 
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
         beforeScript "module use ${params.presto_module_dir}; module load presto/${params.presto_module}"
@@ -201,12 +201,12 @@ process pdmp {
     params.no_pdmp == false
 
     input:
-    tuple val(pointings), file(bestprof), file(fits_files)
+    tuple val(pointings), path(bestprof), path(fits_files)
 
     output:
-    file "*ps"
-    file "*posn"
-    file "*ar"
+    path "*ps"
+    path "*posn"
+    path "*ar"
 
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
         beforeScript "module use ${params.presto_module_dir}; module load dspsr/master"
@@ -243,12 +243,12 @@ process bestgridpos {
     publishDir params.out_dir, mode: 'copy'
 
     input:
-    tuple val(pulsar), file(posn_or_bestprof), val(fwhm), val(orig_pointing)
+    tuple val(pulsar), path(posn_or_bestprof), val(fwhm), val(orig_pointing)
 
     output:
-    file "*predicted_pos.txt"
-    file "*png"
-    file "*orig_best_SN.txt"
+    path "*predicted_pos.txt"
+    path "*png"
+    path "*orig_best_SN.txt"
 
     """
     if [[ ${params.fwhm_ra} == None || ${params.fwhm_dec} == None ]]; then
@@ -265,10 +265,10 @@ process format_output {
     echo true
 
     input:
-    tuple file(orig_best_file), file(posn_or_bestprof)
+    tuple path(orig_best_file), path(posn_or_bestprof)
 
     output:
-    file "*orig_best_predicted_sn.csv"
+    path "*orig_best_predicted_sn.csv"
 
     """
     #!/usr/bin/env python3
@@ -319,10 +319,10 @@ process publish_best_pointing {
     publishDir params.final_dir, mode: 'copy'
 
     input:
-    file fits
+    path fits
 
     output:
-    file '*' includeInputs true
+    path '*' includeInputs true
 
     """
     echo outputing ${fits}
@@ -369,7 +369,7 @@ workflow find_pos {
             }
         }
         bestgridpos( bestprof_or_pdmp.combine(fwhm).combine(orig_pointing.toList()) )
-        //tuple val(pulsar), file(posn_or_bestprof), val(fwhm), val(orig_pointing)
+        //tuple val(pulsar), path(posn_or_bestprof), val(fwhm), val(orig_pointing)
     emit:
         bestgridpos.out[0] // label and new pointing
         bestgridpos.out[2] // orig and best pointing SN file

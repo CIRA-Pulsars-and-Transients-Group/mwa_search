@@ -88,12 +88,12 @@ process prepfold_ch {
     time '2h'
 
     input:
-    file fits_files
+    path fits_files
     each chans
 
     output:
-    file "*bestprof"
-    file fits_files
+    path "*bestprof"
+    path fits_files
 
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
         beforeScript "module use ${params.presto_module_dir}; module load presto/${params.presto_module}"
@@ -118,10 +118,10 @@ process dspsr_ch {
     time '2h'
 
     input:
-    file fits_files
+    path fits_files
 
     output:
-    file "*pTDF"
+    path "*pTDF"
 
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
         beforeScript "module use ${params.presto_module_dir}; module load dspsr/master"
@@ -148,11 +148,11 @@ process dspsr_time {
     time '12h'
 
     input:
-    file fits_files
+    path fits_files
 
     output:
-    file "*pTDF"
-    file "*subint"
+    path "*pTDF"
+    path "*subint"
 
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
         beforeScript "module use ${params.presto_module_dir}; module load dspsr/master"
@@ -177,13 +177,13 @@ process get_toas {
     publishDir "${params.out_dir}/${archive.baseName.split("_")[0]}", pattern: "*ps", mode: 'copy'
 
     input:
-    //each file(archive)
+    //each path(archive)
     //file std_profile
-    tuple file(archive), file(std_profile)
+    tuple path(archive), path(std_profile)
 
     output:
-    file "*tim"
-    file "*ps"
+    path "*tim"
+    path "*ps"
 
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
         beforeScript "module use ${params.presto_module_dir}; module load dspsr/master; module load tempo2"
@@ -205,11 +205,11 @@ process combine_obs_toas {
     input:
     //file toa_tims
     //file subints
-    file toa_tims_and_subints
+    path toa_tims_and_subints
 
     output:
-    file "*_${params.label}.tim"
-    file "*.ar"
+    path "*_${params.label}.tim"
+    path "*.ar"
 
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
         beforeScript "module use ${params.presto_module_dir}; module load dspsr/master; module load tempo2"
@@ -230,10 +230,10 @@ process combine_all_toas {
     when params.fits_file_dir != "None"
 
     input:
-    file toa_tims
+    path toa_tims
 
     output:
-    file "*all.tim"
+    path "*all.tim"
 
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
         beforeScript "module use ${params.presto_module_dir}; module load dspsr/master; module load tempo2"

@@ -57,7 +57,7 @@ else {
 
 process make_pointings {
     output:
-    file "*txt"
+    path "*txt"
 
     """
     #!/usr/bin/env python
@@ -127,7 +127,7 @@ process make_beam {
     tuple val(begin), val(end)
 
     output:
-    file "make_beam*txt"
+    path "make_beam*txt"
 
     """
     make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
@@ -177,7 +177,7 @@ process make_beam_ipfb {
     tuple val(begin), val(end)
 
     output:
-    file "make_beam*txt"
+    path "make_beam*txt"
 
     """
     make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
@@ -223,7 +223,7 @@ process make_beam_single {
     tuple val(begin), val(end)
 
     output:
-    file "make_beam*txt"
+    path "make_beam*txt"
 
     """
     make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
@@ -237,7 +237,7 @@ process make_beam_single {
 
 process calc_beamformer_benchmarks {
     input:
-    file files
+    path files
 
     output:
     stdout()

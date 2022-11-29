@@ -26,7 +26,7 @@ else {
 
 process get_centre_freq {
     output:
-    file 'centre_freq.txt'
+    path 'centre_freq.txt'
 
     """
     #!/usr/bin/env python3
@@ -43,13 +43,11 @@ process get_centre_freq {
 }
 
 process ddplan {
-    label 'ddplan'
-
     input:
     tuple val(name), val(centre_freq)
 
     output:
-    file 'DDplan.txt'
+    path 'DDplan.txt'
 
     """
     #!/usr/bin/env python3
@@ -95,6 +93,8 @@ process ddplan {
 
 process search_dd_fft_acc {
     label 'cpu'
+    label 'presto'
+
     time { search_dd_fft_acc_dur * (0.006*Float.valueOf(dm_values[3]) + 1) < 86400 ? \
                 "${search_dd_fft_acc_dur * (0.006*Float.valueOf(dm_values[3]) + 1)}s" :
                 "86400s"}
@@ -109,34 +109,12 @@ process search_dd_fft_acc {
     }
 
     input:
-    tuple val(name), val(dm_values), file(fits_files)
+    tuple val(name), val(dm_values), path(fits_files)
 
     output:
-    tuple val(name), file("*ACCEL_${params.zmax}"), file("*.inf"), file("*.subSpS"), file('*.cand')
+    tuple val(name), path("*ACCEL_${params.zmax}"), path("*.inf"), path("*.subSpS"), path('*.cand')
     //file "*ACCEL_0" optional true
     //Will have to change the ACCEL_0 if I do an accelsearch
-
-    if ( "$HOSTNAME".startsWith("farnarkle") ) {
-        clusterOptions { "--export=NONE --tmp=${ (int) ( 0.12 * obs_length * Float.valueOf(dm_values[3]) / Float.valueOf(dm_values[5]) ) }MB" }
-        scratch '$JOBFS'
-        beforeScript "module use ${params.module_dir}; module load presto/min_path"
-    }
-    else if ( "$HOSTNAME".startsWith("x86") ) {
-        //scratch '/ssd'
-        container = "file:///${params.containerDir}/presto/presto.sif"
-    }
-    else if ( "$HOSTNAME".startsWith("galaxy") ) {
-        container = "file:///${params.containerDir}/presto/presto.sif"
-    }
-    else if ( "$HOSTNAME".startsWith("garrawarla") ) {
-        clusterOptions { "--export=NONE --tmp=${ (int) ( 0.12 * obs_length * Float.valueOf(dm_values[3]) / Float.valueOf(dm_values[5]) ) }MB" }
-        scratch '/nvmetmp'
-        container = "file:///${params.containerDir}/presto/presto.sif"
-    }
-    else {
-        container = "nickswainston/presto:realfft_docker"
-    }
-
 
     """
     echo "lowdm highdm dmstep ndms timeres downsamp"
@@ -165,15 +143,17 @@ process search_dd_fft_acc {
 
 process accelsift {
     label 'cpu'
+    label 'presto'
+
     time '25m'
     errorStrategy 'retry'
     maxRetries 1
 
     input:
-    tuple val(name), file(accel_inf_single_pulse)
+    tuple val(name), path(accel_inf_single_pulse)
 
     output:
-    tuple val(name), file("cands_*greped.txt")
+    tuple val(name), path("cands_*greped.txt")
 
     if ( "$HOSTNAME".startsWith("x86") || "$HOSTNAME".startsWith("garrawarla") ||\
          "$HOSTNAME".startsWith("galaxy") ) {
@@ -216,11 +196,11 @@ process single_pulse_searcher {
     errorStrategy 'ignore'
 
     input:
-    tuple val(name), file(sps), file(fits)
+    tuple val(name), path(sps), path(fits)
 
     output:
-    file "*pdf" optional true
-    file "*.SpS"
+    path "*pdf" optional true
+    path "*.SpS"
 
     if ( "$HOSTNAME".startsWith("farnarkle") || "$HOSTNAME".startsWith("x86") ||\
          "$HOSTNAME".startsWith("garrawarla") || "$HOSTNAME".startsWith("galaxy") ) {
@@ -251,10 +231,10 @@ process prepfold {
     maxRetries 1
 
     input:
-    tuple val(cand_line), file(cand_file), file(cand_inf), file(fits_files)
+    tuple val(cand_line), path(cand_file), path(cand_inf), path(fits_files)
 
     output:
-    file "*pfd*"
+    path "*pfd*"
 
     if ( "$HOSTNAME".startsWith("farnarkle") || "$HOSTNAME".startsWith("galaxy") ) {
         beforeScript "module use ${params.presto_module_dir}; module load presto/${params.presto_module}"
@@ -313,10 +293,10 @@ process search_dd {
     }
 
     input:
-    tuple val(name), val(dm_values), file(fits_files)
+    tuple val(name), val(dm_values), path(fits_files)
 
     output:
-    tuple val(name), file("*.inf"), file("*.subSpS")
+    tuple val(name), path("*.inf"), path("*.subSpS")
     //Will have to change the ACCEL_0 if I do an accelsearch
 
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
@@ -354,14 +334,14 @@ process search_dd {
 
 workflow pulsar_search {
     take:
-        name_fits_files // [val(candidateName_obsid_pointing), file(fits_files)]
+        name_fits_files // [val(candidateName_obsid_pointing), path(fits_files)]
     main:
         get_centre_freq()
         ddplan( name_fits_files.map{ it -> it[0] }.combine(get_centre_freq.out.splitCsv()) )
         search_dd_fft_acc( // combine the fits files and ddplan with the matching name key (candidateName_obsid_pointing)
                            ddplan.out.splitCsv().map{ it -> [ it[0], [ it[1], it[2], it[3], it[4], it[5], it[6], it[7] ] ] }.\
                            concat(name_fits_files).groupTuple().\
-                           // Find for each ddplan match that with the fits files and the name key then change the format to [val(name), val(dm_values), file(fits_files)]
+                           // Find for each ddplan match that with the fits files and the name key then change the format to [val(name), val(dm_values), path(fits_files)]
                            map{ it -> [it[1].init(), [[it[0], it[1].last()]]].combinations() }.flatMap().\
                            map{ it -> [it[1][0], it[0], it[1][1]]} )
         // Get all the inf, ACCEL and single pulse files and sort them into groups with the same name key
@@ -382,7 +362,7 @@ workflow pulsar_search {
                   flatten().map{ it -> [it.baseName.split("_ACCEL")[0], it ] }).groupTuple( size: 2 )
                   // match the cand and inf file with each accelsift line and reoraganise
                   ).map{ it -> [it[0][0].split("_DM")[0], [it[0][1], it[1][1][0], it[1][1][1]]] }
-                  // Match with fits files and eogranise to val(cand_line), file(cand_file), file(cand_inf), file(fits_files)
+                  // Match with fits files and eogranise to val(cand_line), path(cand_file), path(cand_inf), path(fits_files)
                   ).map{ it -> [it[1][1][0], it[1][1][2], it[1][1][1], it[0][1]] } )
     emit:
         accelsift.out
@@ -397,7 +377,7 @@ workflow single_pulse_search {
         ddplan( name_fits_files.map{ it -> it[0] }.combine(get_centre_freq.out.splitCsv()) )
         search_dd( // combine the fits files and ddplan witht he matching name key (candidateName_obsid_pointing)
                    ddplan.out.splitCsv().map{ it -> [ it[0], [ it[1], it[2], it[3], it[4], it[5], it[6], it[7] ] ] }.concat(name_fits_files).groupTuple().\
-                   // Find for each ddplan match that with the fits files and the name key then change the format to [val(name), val(dm_values), file(fits_files)]
+                   // Find for each ddplan match that with the fits files and the name key then change the format to [val(name), val(dm_values), path(fits_files)]
                    map{ it -> [it[1].init(), [[it[0], it[1].last()]]].combinations() }.flatMap().map{ it -> [it[1][0], it[0], it[1][1]]} )
         single_pulse_searcher( search_dd.out.map{ it -> [it[0], [it[1]].flatten().findAll { it != null } + [it[2]].flatten().findAll { it != null }] }.\
                                groupTuple( size: total_dm_jobs, remainder: true).map{ it -> [it[0], it[1].flatten()] }.\
