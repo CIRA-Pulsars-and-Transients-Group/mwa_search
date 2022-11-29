@@ -3,14 +3,14 @@
 include pdmp_wf from './dspsr_module'
 
 
-params.out_dir = "${params.scratch_basedir}/${params.obsid}/pointings"
+params.out_dir = "${params.vcsdir}/${params.obsid}/pointings"
 
 
 if ( params.pointings ) {
     pointings = Channel.from(params.pointings)
 }
 
-fits = Channel.fromPath( "${params.basedir}/${params.obsid}/pointings/${params.pointings}/${params.obsid}*fits" ).collect()
+fits = Channel.fromPath( "${params.vcsdir}/${params.obsid}/pointings/${params.pointings}/${params.obsid}*fits" ).collect()
 
 workflow {
     pdmp_wf( fits,

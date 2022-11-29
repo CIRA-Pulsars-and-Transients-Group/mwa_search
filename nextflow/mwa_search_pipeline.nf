@@ -62,13 +62,47 @@ if ( params.help ) {
     exit(0)
 }
 
+// Command line argument parsing
+
+if ( params.bestprof_pointings ) {
+    bestprof_files = Channel.fromPath("${params.bestprof_pointings}/*.bestprof").collect()
+}
+else {
+    bestprof_files = Channel.empty()
+}
+bestprof_files = Channel.empty()
+if ( params.pointing_file ) {
+    // Grab the pointings from a pointing file
+    pointings = Channel
+        .fromPath(params.pointing_file)
+        .splitCsv()
+        .collect()
+}
+else if ( params.pointings ) {
+    // Grab the pointings from the command line
+    pointings = Channel
+        .of(params.pointings.split(","))
+        .collect()
+}
+else if ( params.bestprof_pointings ) {
+    // Grab the pointings from the bestprof files
+    bestprof_files = Channel.fromPath("${params.bestprof_pointings}/*.bestprof").collect()
+    pointings = bestprof_pointings.out.splitCsv()
+        // Only grab the pointings
+        .map{ point, dm, period -> point }.collect()
+}
+else {
+    println "No pointings given. Either use --pointing_file or --pointings. Exiting"
+    exit(1)
+}
+
+
 process bestprof_pointings {
     input:
-    val pointings
-    file bestprof_files
+    path bestprof_files
 
     output:
-    file "${params.obsid}_DM_pointing.csv"
+    path "${params.obsid}_DM_pointing.csv"
 
     """
     #!/usr/bin/env python
@@ -78,22 +112,16 @@ process bestprof_pointings {
     from vcstools.pointing_utils import format_ra_dec
 
     dm_pointings = []
-    if "${params.bestprof_pointings}" == "null":
-        pointings = ["${pointings.join('", "')}"]
-        for p in pointings:
-            ra, dec = format_ra_dec([[p.split("_")[0], p.split("_")[1]]])[0]
-            dm_pointings.append(["{}_{}".format(ra, dec), "Blind", "None"])
-    else:
-        bestprof_files = glob.glob("*.bestprof")
-        for bfile_loc in bestprof_files:
-            pointing = bfile_loc.split("${params.obsid}_")[-1].split("_DM")[0]
-            ra, dec = format_ra_dec([[pointing.split("_")[0], pointing.split("_")[1]]])[0]
-            with open(bfile_loc,"r") as bestprof:
-                lines = bestprof.readlines()
-                dm = lines[14][22:-1]
-                period = lines[15][22:-1]
-                period, period_uncer = period.split('  +/- ')
-            dm_pointings.append(["{}_{}".format(ra, dec), "dm_{}".format(dm), period])
+    bestprof_files = glob.glob("*.bestprof")
+    for bfile_loc in bestprof_files:
+        pointing = bfile_loc.split("${params.obsid}_")[-1].split("_DM")[0]
+        ra, dec = format_ra_dec([[pointing.split("_")[0], pointing.split("_")[1]]])[0]
+        with open(bfile_loc,"r") as bestprof:
+            lines = bestprof.readlines()
+            dm = lines[14][22:-1]
+            period = lines[15][22:-1]
+            period, period_uncer = period.split('  +/- ')
+        dm_pointings.append(["{}_{}".format(ra, dec), "dm_{}".format(dm), period])
 
     with open("${params.obsid}_DM_pointing.csv", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
@@ -104,6 +132,8 @@ process bestprof_pointings {
 
 process follow_up_fold {
     label 'cpu'
+    label 'presto'
+
     time "6h"
     publishDir params.out_dir, mode: 'copy'
     errorStrategy 'retry'
@@ -113,20 +143,11 @@ process follow_up_fold {
     params.bestprof_pointings != null
 
     input:
-    tuple file(fits_files), val(dm), val(period)
+    tuple path(fits_files), val(dm), val(period)
 
     output:
-    file "*pfd*"
+    path "*pfd*"
 
-    if ( "$HOSTNAME".startsWith("farnarkle") || "$HOSTNAME".startsWith("galaxy") ) {
-        beforeScript "module use ${params.presto_module_dir}; module load presto/${params.presto_module}"
-    }
-    else if ( "$HOSTNAME".startsWith("x86") || "$HOSTNAME".startsWith("garrawarla") ) {
-        container = "file:///${params.containerDir}/presto/presto.sif"
-    }
-    else {
-        container = "nickswainston/presto:realfft_docker"
-    }
     """
     # Set up the prepfold options to match the ML candidate profiler
     temp_period=${Float.valueOf(period)/1000}
@@ -154,42 +175,31 @@ process follow_up_fold {
     """
 }
 
-if ( params.pointing_file ) {
-    pointings = Channel
-        .fromPath(params.pointing_file)
-        .splitCsv()
-        .collect()
-}
-else if ( params.pointings ) {
-    pointings = Channel
-        .from(params.pointings.split(","))
-        .collect()
-}
-else if ( params.bestprof_pointings ) {
-    pointings = Channel.from("null")
-}
-else {
-    println "No pointings given. Either use --pointing_file or --pointings. Exiting"
-    exit(1)
-}
-
 include { pre_beamform; beamform } from './beamform_module'
 include { pulsar_search } from './pulsar_search_module'
 include { classifier }   from './classifier_module'
 
 workflow {
-    bestprof_pointings( pointings,
-                        bestprof_files )
+    pointings.view()
+    bestprof_pointings( bestprof_files  )
     pre_beamform()
-    beamform( pre_beamform.out[0],\
-              pre_beamform.out[1],\
-              pre_beamform.out[2],\
-              bestprof_pointings.out.splitCsv().map{ it -> it[0] }.flatten().unique().collate( params.max_pointings ) )
-    follow_up_fold( beamform.out[1].map{ it -> [ it[0].getBaseName().split("/")[-1].split("_ch")[0], it ] }.cross(
-                    bestprof_pointings.out.splitCsv().map{ it -> ["${params.obsid}_"+it[0], it[1], it[2]]}.map{ it -> [it[0].toString(), [it[1], it[2]]] }).\
-                    map{ it -> [it[0][1], it[1][1][0].split("_")[-1], it[1][1][1]] } )
-    pulsar_search( beamform.out[1].map{ it -> [ it[0].getBaseName().split("/")[-1].split("_ch")[0], it ] }.concat(
-                   bestprof_pointings.out.splitCsv().map{ it -> ["${params.obsid}_"+it[0], it[1]]}).map{ it -> [it[0].toString(), it[1]] }.\
-                   groupTuple( size: 2 ).map{ it -> [it[1][1]+"_"+it[0], it[1][0]] } )
+    beamform(
+        pre_beamform.out[0],
+        pre_beamform.out[1],
+        pre_beamform.out[2],
+        bestprof_pointings.out.splitCsv().map{ it -> it[0] }.flatten().unique().collate( params.max_pointings )
+    )
+    follow_up_fold(
+        beamform.out[1].map{ it -> [ it[0].getBaseName().split("/")[-1].split("_ch")[0], it ] }.cross(
+            bestprof_pointings.out.splitCsv().map{ it -> ["${params.obsid}_"+it[0], it[1], it[2]]}.map{ it -> [it[0].toString(), [it[1], it[2]]] }
+        )
+        .map{ it -> [it[0][1], it[1][1][0].split("_")[-1], it[1][1][1]] }
+    )
+    pulsar_search(
+        beamform.out[1].map{ it -> [ it[0].getBaseName().split("/")[-1].split("_ch")[0], it ] }.concat(
+            bestprof_pointings.out.splitCsv().map{ it -> ["${params.obsid}_"+it[0], it[1]]}
+        ).map{ it -> [it[0].toString(), it[1]] }
+        .groupTuple( size: 2 ).map{ it -> [it[1][1]+"_"+it[0], it[1][0]] }
+    )
     classifier( pulsar_search.out[1].flatten().collate( 120 ) )
 }

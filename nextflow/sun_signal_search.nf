@@ -29,12 +29,12 @@ else if ( params.fits_files ) {
 }
 else {
     if ( params.scratch ) {
-        fits_files = Channel.fromPath( "${params.scratch_basedir}/${params.obsid}/dpp_pointings/${params.pointings}/${params.obsid}_*.fits", checkIfExists: true )
-        nfiles = new File("${params.scratch_basedir}/${params.obsid}/dpp_pointings/${params.pointings}").listFiles().findAll { it.name ==~ /.*1*fits/ }.size()
+        fits_files = Channel.fromPath( "${params.vcsdir}/${params.obsid}/dpp_pointings/${params.pointings}/${params.obsid}_*.fits", checkIfExists: true )
+        nfiles = new File("${params.vcsdir}/${params.obsid}/dpp_pointings/${params.pointings}").listFiles().findAll { it.name ==~ /.*1*fits/ }.size()
     }
     else {
-        fits_files = Channel.fromPath( "${params.basedir}/${params.obsid}/pointings/${params.pointings}/${params.obsid}_*.fits", checkIfExists: true )
-        nfiles = new File("${params.basedir}/${params.obsid}/pointings/${params.pointings}").listFiles().findAll { it.name ==~ /.*1*fits/ }.size()
+        fits_files = Channel.fromPath( "${params.vcsdir}/${params.obsid}/pointings/${params.pointings}/${params.obsid}_*.fits", checkIfExists: true )
+        nfiles = new File("${params.vcsdir}/${params.obsid}/pointings/${params.pointings}").listFiles().findAll { it.name ==~ /.*1*fits/ }.size()
     }
 }
 
@@ -56,9 +56,9 @@ if ( params.help ) {
              |  --fits_file_dir
              |              Directory containing the fits files. Use this if the fits files
              |              are not in the default directory :
-             |              ${params.basedir}/<obsid>/pointings/${params.pointings}
+             |              ${params.vcsdir}/<obsid>/pointings/${params.pointings}
              |  --scratch   Change the default directory to:
-             |              ${params.scratch_basedir}/<obsid>/pointings/${params.pointings}
+             |              ${params.vcsdir}/<obsid>/pointings/${params.pointings}
              |  --dm_min    Minimum DM to search over [default: 1]
              |  --dm_max    Maximum DM to search over [default: 250]
              |  --dm_min_step
@@ -79,7 +79,7 @@ process search_dd_fft_acc {
     //Will ignore errors for now because I have no idea why it dies sometimes
     errorStrategy { task.attempt > 1 ? 'ignore' : 'retry' }
     maxForks 800
-    publishDir "${params.scratch_basedir}/${params.obsid}/pointings/${name.split("${params.obsid}_")[1]}", mode: 'copy'
+    publishDir "${params.vcsdir}/${params.obsid}/pointings/${name.split("${params.obsid}_")[1]}", mode: 'copy'
 
     input:
     tuple val(name), val(dm_values), file(fits_files)

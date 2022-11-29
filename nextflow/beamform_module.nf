@@ -93,7 +93,7 @@ process beamform_setup {
 
     # Ensure the metafits files is there
     ensure_metafits(
-        "${params.basedir}/${params.obsid}",
+        "${params.vcsdir}/${params.obsid}",
         "${params.obsid}",
         "${params.obsid}_metafits_ppds.fits",
     )
@@ -104,10 +104,10 @@ process beamform_setup {
         spamwriter.writerow([gps_to_utc(beg)])
 
     # Make sure all the required directories are made
-    mdir("${params.scratch_basedir}/${params.obsid}", "Data")
-    mdir("${params.scratch_basedir}/${params.obsid}", "Products")
-    mdir("${params.scratch_basedir}/batch", "Batch")
-    mdir("${params.scratch_basedir}/${params.obsid}/pointings", "Pointings")
+    mdir("${params.vcsdir}/${params.obsid}", "Data")
+    mdir("${params.vcsdir}/${params.obsid}", "Products")
+    mdir("${params.vcsdir}/batch", "Batch")
+    mdir("${params.vcsdir}/${params.obsid}/pointings", "Pointings")
     """
 }
 
@@ -162,8 +162,8 @@ process make_beam {
 
     make_beam -o ${params.obsid} -b ${begin} -e ${end} -a 128 -n 128 \
 -f ${channel_id} \${jones_option} \
--d ${params.scratch_basedir}/${params.obsid}/combined -P ${points.join(",").replaceAll(~/\s/,"")} \
--r 10000 -m ${params.scratch_basedir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
+-d ${params.vcsdir}/${params.obsid}/combined -P ${points.join(",").replaceAll(~/\s/,"")} \
+-r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
 ${bf_out} -t 6000 -F ${params.didir}/flagged_tiles.txt  -z ${utc}
     mv */*fits .
     """
@@ -173,8 +173,8 @@ ${bf_out} -t 6000 -F ${params.didir}/flagged_tiles.txt  -z ${utc}
 process make_beam_ipfb {
     label 'gpu'
     label 'vcsbeam'
-    publishDir "${params.basedir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*hdr"
-    publishDir "${params.basedir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*vdif"
+    publishDir "${params.vcsdir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*hdr"
+    publishDir "${params.vcsdir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*vdif"
 
     time "${mb_ipfb_dur*task.attempt}s"
     errorStrategy 'retry'
@@ -202,13 +202,13 @@ process make_beam_ipfb {
     fi
 
     if ${params.publish_fits}; then
-        mkdir -p -m 771 ${params.basedir}/${params.obsid}/pointings/${point}
+        mkdir -p -m 771 ${params.vcsdir}/${params.obsid}/pointings/${point}
     fi
 
     make_beam -o ${params.obsid} -b ${begin} -e ${end} -a 128 -n 128 \
 -f ${channel_id} \${jones_option} \
--d ${params.scratch_basedir}/${params.obsid}/combined -P ${point} \
--r 10000 -m ${params.scratch_basedir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
+-d ${params.vcsdir}/${params.obsid}/combined -P ${point} \
+-r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
 -p -v -t 6000 -F ${params.didir}/flagged_tiles.txt -z ${utc} -g 11
     mv */*fits .
     """
@@ -218,7 +218,7 @@ process splice {
     label 'cpu'
     label 'vcstools'
 
-    publishDir "${params.basedir}/${params.obsid}/pointings/${unspliced[0].baseName.split("_")[2]}_${unspliced[0].baseName.split("_")[3]}", mode: 'copy', enabled: params.publish_fits
+    publishDir "${params.vcsdir}/${params.obsid}/pointings/${unspliced[0].baseName.split("_")[2]}_${unspliced[0].baseName.split("_")[3]}", mode: 'copy', enabled: params.publish_fits
     time '3h'
     maxForks 300
     errorStrategy 'retry'

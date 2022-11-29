@@ -84,7 +84,7 @@ else {
 include { pre_beamform; beamform } from './beamform_module'
 include { fwhm_calc } from './data_processing_pipeline'
 
-params.didir = "${params.scratch_basedir}/${params.obsid}/cal/${params.calid}/rts"
+params.didir = "${params.vcsdir}/${params.obsid}/cal/${params.calid}/rts"
 params.out_dir = "${params.search_dir}/${params.obsid}_candidate_follow_up"
 params.final_dir = "${params.search_dir}/psr2_J0024-1932/${params.obsid}"
 

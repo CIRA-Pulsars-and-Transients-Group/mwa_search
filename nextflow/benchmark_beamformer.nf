@@ -132,8 +132,8 @@ process make_beam {
     """
     make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
 -f ${channel_pair[0]} -J ${params.didir}/DI_JonesMatrices_node${channel_pair[1]}.dat \
--d ${params.scratch_basedir}/${params.obsid}/combined -P ${point.join(",")} \
--r 10000 -m ${params.scratch_basedir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
+-d ${params.vcsdir}/${params.obsid}/combined -P ${point.join(",")} \
+-r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
 ${bf_out} -t 6000 -z $utc &> make_beam_${channel_pair[1]}_n${point.size()}_output.txt
     rm */*fits
     """
@@ -182,8 +182,8 @@ process make_beam_ipfb {
     """
     make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
 -f ${channel_pair[0]} -J ${params.didir}/DI_JonesMatrices_node${channel_pair[1]}.dat \
--d ${params.scratch_basedir}/${params.obsid}/combined -P ${point} \
--r 10000 -m ${params.scratch_basedir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
+-d ${params.vcsdir}/${params.obsid}/combined -P ${point} \
+-r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
 -p -v -t 6000 -z $utc &> make_beam_${channel_pair[1]}_IPFB_output.txt
     rm */*fits
     """
@@ -228,8 +228,8 @@ process make_beam_single {
     """
     make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
 -f ${channel_pair[0]} -J ${params.didir}/DI_JonesMatrices_node${channel_pair[1]}.dat \
--d ${params.scratch_basedir}/${params.obsid}/combined -R ${point.split("_")[0]} -D ${point.split("_")[1]} \
--r 10000 -m ${params.scratch_basedir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
+-d ${params.vcsdir}/${params.obsid}/combined -R ${point.split("_")[0]} -D ${point.split("_")[1]} \
+-r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
 -p -z $utc &> make_beam_${channel_pair[1]}_single-pixel_output.txt
     rm *fits
     """
