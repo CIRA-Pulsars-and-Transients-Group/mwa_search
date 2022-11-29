@@ -1,5 +1,7 @@
 #!/usr/bin/env nextflow
 
+nextflow.enable.dsl=2
+
 params.help = false
 if ( params.help ) {
     help = """beamform.nf: A pipeline that will beamform and splice on all input pointings.
@@ -66,15 +68,17 @@ include { pre_beamform; beamform; beamform_ipfb } from './beamform_module'
 workflow {
     pre_beamform()
     if ( params.ipfb ) {
-        beamform_ipfb( pre_beamform.out[0],\
-                       pre_beamform.out[1],\
-                       pre_beamform.out[2],\
-                       pointings )
+        beamform_ipfb(
+            pre_beamform.out.utc_beg_end_dur,
+            pre_beamform.out.channels,
+            pointings
+        )
     }
     else {
-        beamform( pre_beamform.out[0],\
-                  pre_beamform.out[1],\
-                  pre_beamform.out[2],\
-                  pointings )
+        beamform(
+            pre_beamform.out.utc_beg_end_dur,
+            pre_beamform.out.channels,
+            pointings
+        )
     }
 }
