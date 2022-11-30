@@ -82,6 +82,6 @@ workflow {
     }
     else {
         pulsar_search( fits_file.toSortedList().map{ it -> [ params.cand + '_' + it[0].getBaseName().split("/")[-1].split("_ch")[0], it ] } )
-        //classifier( pulsar_search.out[1].flatten().collate( 120 ) )
+        classifier( pulsar_search.out )
     }
 }

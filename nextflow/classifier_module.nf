@@ -13,11 +13,10 @@ process feature_extract {
     maxRetries 1
 
     input:
-    path pfd_files
+    tuple path(pfd), path(bestprof), path(ps), path(png)
 
     output:
-    path "*.arff"
-    path "*pfd*", includeInputs: true
+    tuple path(pfd), path(bestprof), path(ps), path(png), path("*.arff")
 
     """
     ls
@@ -31,12 +30,10 @@ process classify {
     label 'lofar_ml'
 
     input:
-    path fex_out
-    path pfd_files
+    tuple path(pfd), path(bestprof), path(ps), path(png), path(fex_out)
 
     output:
-    path "feature_extraction*"
-    path "*pfd*", includeInputs: true
+    tuple path(pfd), path(bestprof), path(ps), path(png), path(fex_out), path("feature_extraction*")
 
     """
     REALPATH=`realpath ${fex_out}`
@@ -53,13 +50,12 @@ process classify {
 }
 
 process sort_detections {
-    label 'lofar_ml'
+    label 'lofar_feature_lab'
 
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_classifer_cands
 
     input:
-    path classifier_files
-    path pfd_files
+    tuple path(pfd), path(bestprof), path(ps), path(png), path(fex_out), path(classifier_files)
 
     output:
     path "positive_detections/*" optional true
@@ -85,13 +81,14 @@ process sort_detections {
 
 workflow classifier {
     take:
-        pfd_files
+        presto_candiates
     main:
-        feature_extract( pfd_files )
-        classify( feature_extract.out[0],\
-                  feature_extract.out[1] )
-        sort_detections( classify.out[0],\
-                         classify.out[1] )//pfd_files )
+        presto_candiates.view()
+        // Collate into groups of 30 candidates
+        collated_cands = presto_candiates.collate( 30 ).view().map{ it.transpose() }.view()
+        feature_extract( collated_cands )
+        classify( feature_extract.out )
+        sort_detections( classify.out )
     emit:
         sort_detections.out[0]
         sort_detections.out[1]

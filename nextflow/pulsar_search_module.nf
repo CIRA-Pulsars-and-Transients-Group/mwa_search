@@ -202,7 +202,7 @@ process prepfold {
     tuple val(name), path(fits_files), val(dur), val(cand_line), path(cand_inf), path(cand_file)
 
     output:
-    path "*pfd*"
+    tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png", optional: true) // some PRESTO installs don't make pngs
 
     //no mask command currently
     //${cand_line.split()[0].substring(0, cand_line.split()[0].lastIndexOf(":")) + '.cand'}
@@ -231,7 +231,7 @@ process prepfold {
 
     #-p \$period
     prepfold -ncpus ${task.cpus} -o ${cand_line.split()[0]} -n \$nbins -dm ${cand_line.split()[1]} -noxwin -noclip -nsub 256 \
--accelfile ${cand_line.split()[0].substring(0, cand_line.split()[0].lastIndexOf(":"))}.cand -accelcand ${cand_line.split()[0].split(":")[-1]} \
+-accelfile ${cand_file} -accelcand ${cand_line.split()[0].split(":")[-1]} \
 -npart \$ntimechunk -dmstep \$dmstep -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact -runavg *.fits
     """
 }
@@ -313,15 +313,18 @@ workflow pulsar_search {
     main:
         // Grab meta data from the fits file
         get_freq_and_dur( name_fits_files ) // [ name, fits_file, freq, dur ]
+
         // Grab the meta data out of the CSV
         name_fits_freq_dur = get_freq_and_dur.out.map { name, fits, meta -> [ name, fits, meta.splitCsv()[0][0], meta.splitCsv()[0][1] ] }
         ddplan( name_fits_freq_dur )
         // ddplan's output format is [ name, fits_file, centrefreq(MHz), duration(s), DDplan_file ]
+
         // so split the csv to get the DDplan and transpose to make a job for each row of the plan
         search_dd_fft_acc(
             ddplan.out.map { name, fits, freq, dur, ddplan -> [ name, fits, freq, dur, ddplan.splitCsv() ] }.transpose()
         )
         // Output format: [ name,  ACCEL_summary, presto_inf, single_pulse, periodic_candidates ]
+
         // Get all the inf, ACCEL and single pulse files and sort them into groups with the same name key
         inf_accel_sp_cand = search_dd_fft_acc.out.transpose().groupTuple()
         accelsift( inf_accel_sp_cand )
@@ -340,17 +343,15 @@ workflow pulsar_search {
         cands_for_prepfold = name_fits_freq_dur.cross( accel_inf_cands )
             .map{ [ it[0][0], it[0][1], it[0][3], it[1][1], it[1][2], it[1][3] ] }
             // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
-        prepfold( cands_for_prepfold )
+        prepfold( cands_for_prepfold ).view()
 
-        // Combined the grouped sinngle pulse files with the fits files
+        // Combined the grouped single pulse files with the fits files
         single_pulse_searcher(
             inf_accel_sp_cand.map{ [ it[0], it[3] ] }.concat( name_fits_files ).groupTuple().map{ [ it[0], it[1][0], it[1][1] ] }
         )
-        single_pulse_searcher.out[0].view()
-        single_pulse_searcher.out[1].view()
-    // emit:
-    //     accelsift.out
-    //     prepfold.out
+    emit:
+        // [ pfd, bestprof, ps, png ]
+        prepfold.out
 }
 
 workflow single_pulse_search {
