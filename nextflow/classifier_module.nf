@@ -6,6 +6,8 @@ params.out_dir = "${params.search_dir}/${params.obsid}_candidates"
 
 process feature_extract {
     label 'cpu'
+    label 'lofar_feature_lab'
+
     time '1h'
     errorStrategy 'retry'
     maxRetries 1
@@ -17,16 +19,6 @@ process feature_extract {
     path "*.arff"
     path "*pfd*", includeInputs: true
 
-    if ( "$HOSTNAME".startsWith("farnarkle") ) {
-        beforeScript "module use $params.module_dir; module load PulsarFeatureLab/V1.3.2"
-    }
-    else if ( "$HOSTNAME".startsWith("x86") || "$HOSTNAME".startsWith("garrawarla") || "$HOSTNAME".startsWith("galaxy") ) {
-        container = "file:///${params.containerDir}/lofar_pulsar_ml/lofar_pulsar_ml.sif"
-    }
-    else {
-        container = "cirapulsarsandtransients/pulsarfeaturelab:V1.3.2"
-    }
-
     """
     ls
     cat `ls ./ | head -n 1`
@@ -36,6 +28,8 @@ process feature_extract {
 }
 
 process classify {
+    label 'lofar_ml'
+
     input:
     path fex_out
     path pfd_files
@@ -43,16 +37,6 @@ process classify {
     output:
     path "feature_extraction*"
     path "*pfd*", includeInputs: true
-
-    if ( "$HOSTNAME".startsWith("farnarkle") ) {
-        beforeScript "module use $params.module_dir; module load LOTAASClassifier/master"
-    }
-    else if ( "$HOSTNAME".startsWith("x86") || "$HOSTNAME".startsWith("garrawarla") || "$HOSTNAME".startsWith("galaxy") ) {
-        container = "file:///${params.containerDir}/lofar_pulsar_ml/lofar_pulsar_ml.sif"
-    }
-    else {
-        container = "cirapulsarsandtransients/pulsarfeaturelab:V1.3.2"
-    }
 
     """
     REALPATH=`realpath ${fex_out}`
@@ -69,6 +53,8 @@ process classify {
 }
 
 process sort_detections {
+    label 'lofar_ml'
+
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_classifer_cands
 
     input:
@@ -79,12 +65,6 @@ process sort_detections {
     path "positive_detections/*" optional true
     path "negative_detections/*" optional true
 
-    if ( "$HOSTNAME".startsWith("x86") || "$HOSTNAME".startsWith("garrawarla") || "$HOSTNAME".startsWith("galaxy") ) {
-        container = "file:///${params.containerDir}/lofar_pulsar_ml/lofar_pulsar_ml.sif"
-    }
-    else if ( ! "$HOSTNAME".startsWith("farnarkle") ) {
-        container = "nickswainston/lofar_pulsar_ml"
-    }
     """
     LOTAAS_wrapper.py
     if [ -f LOTAAS_positive_detections.txt ]; then
