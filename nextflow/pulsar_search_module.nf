@@ -202,7 +202,7 @@ process prepfold {
     tuple val(name), path(fits_files), val(dur), val(cand_line), path(cand_inf), path(cand_file)
 
     output:
-    tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png", optional: true) // some PRESTO installs don't make pngs
+    tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png")//, optional: true) // some PRESTO installs don't make pngs
 
     //no mask command currently
     //${cand_line.split()[0].substring(0, cand_line.split()[0].lastIndexOf(":")) + '.cand'}
@@ -296,7 +296,7 @@ process single_pulse_searcher {
     tuple val(name), path(sps), path(fits)
 
     output:
-    path "*pdf" optional true
+    path "*pdf", optional: true
     path "*.SpS"
 
     """
@@ -343,7 +343,7 @@ workflow pulsar_search {
         cands_for_prepfold = name_fits_freq_dur.cross( accel_inf_cands )
             .map{ [ it[0][0], it[0][1], it[0][3], it[1][1], it[1][2], it[1][3] ] }
             // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
-        prepfold( cands_for_prepfold ).view()
+        prepfold( cands_for_prepfold )
 
         // Combined the grouped single pulse files with the fits files
         single_pulse_searcher(

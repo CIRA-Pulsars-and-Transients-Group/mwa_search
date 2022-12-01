@@ -1,5 +1,7 @@
 #!/usr/bin/env nextflow
 
+nextflow.enable.dsl=2
+
 params.help = false
 if ( params.help ) {
     help = """mwa_search_pipeline.nf: A pipeline that will beamform and perform a pulsar search
@@ -64,32 +66,27 @@ if ( params.help ) {
 
 // Command line argument parsing
 
-if ( params.bestprof_pointings ) {
-    bestprof_files = Channel.fromPath("${params.bestprof_pointings}/*.bestprof").collect()
-}
-else {
-    bestprof_files = Channel.empty()
-}
+// if ( params.bestprof_pointings ) {
+//     bestprof_files = Channel.fromPath("${params.bestprof_pointings}/*.bestprof").collect()
+// }
+// else {
+//     bestprof_files = Channel.empty()
+// }
 bestprof_files = Channel.empty()
 if ( params.pointing_file ) {
     // Grab the pointings from a pointing file
     pointings = Channel
         .fromPath(params.pointing_file)
         .splitCsv()
-        .collect()
 }
 else if ( params.pointings ) {
     // Grab the pointings from the command line
     pointings = Channel
         .of(params.pointings.split(","))
-        .collect()
 }
 else if ( params.bestprof_pointings ) {
     // Grab the pointings from the bestprof files
     bestprof_files = Channel.fromPath("${params.bestprof_pointings}/*.bestprof").collect()
-    pointings = bestprof_pointings.out.splitCsv()
-        // Only grab the pointings
-        .map{ point, dm, period -> point }.collect()
 }
 else {
     println "No pointings given. Either use --pointing_file or --pointings. Exiting"
@@ -112,7 +109,7 @@ process bestprof_pointings {
     from vcstools.pointing_utils import format_ra_dec
 
     dm_pointings = []
-    bestprof_files = glob.glob("*.bestprof")
+    bestprof_files = ["${bestprof_files.join('", "')}"]
     for bfile_loc in bestprof_files:
         pointing = bfile_loc.split("${params.obsid}_")[-1].split("_DM")[0]
         ra, dec = format_ra_dec([[pointing.split("_")[0], pointing.split("_")[1]]])[0]
@@ -121,7 +118,7 @@ process bestprof_pointings {
             dm = lines[14][22:-1]
             period = lines[15][22:-1]
             period, period_uncer = period.split('  +/- ')
-        dm_pointings.append(["{}_{}".format(ra, dec), "dm_{}".format(dm), period])
+        dm_pointings.append([f"{ra}_{dec}", f"dm_{dm}_{ra}_{dec}", dm, period])
 
     with open("${params.obsid}_DM_pointing.csv", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
@@ -170,36 +167,63 @@ process follow_up_fold {
     ndmfact=`echo "1 + 1/(\$ddm*\$nbins)" | bc`
     echo "ndmfact: \$ndmfact   ddm: \$ddm"
 
-    prepfold -ncpus $task.cpus -o follow_up_${params.obsid}_P${period.replaceAll(~/\s/,"")}_DM${dm} -n \$nbins -dm ${dm} -p \$period -noxwin -noclip -nsub 256 \
+    prepfold -ncpus ${task.cpus} -o follow_up_${params.obsid}_P${period.replaceAll(~/\s/,"")}_DM${dm} -n \$nbins -dm ${dm} -p \$period -noxwin -noclip -nsub 256 \
 -npart \$ntimechunk -dmstep \$dmstep -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact -runavg *.fits
     """
 }
 
 include { pre_beamform; beamform } from './beamform_module'
-include { pulsar_search } from './pulsar_search_module'
-include { classifier }   from './classifier_module'
+include { pulsar_search          } from './pulsar_search_module'
+include { classifier             } from './classifier_module'
 
 workflow {
-    pointings.view()
-    bestprof_pointings( bestprof_files  )
+    // Parse pointing input
+    if ( params.pointing_file ) {
+        // Grab the pointings from a pointing file
+        pointings = Channel.fromPath(params.pointing_file).splitCsv()
+    }
+    else if ( params.pointings ) {
+        // Grab the pointings from the command line
+        pointings = Channel.of(params.pointings.split(","))
+    }
+    else if ( params.bestprof_pointings ) {
+        // Grab the pointings from the bestprof files
+        bestprof_files = Channel.fromPath("${params.bestprof_pointings}/*.bestprof").collect()
+        // If given bestprof files, extract pointings from them
+        bestprof_pointings( bestprof_files )
+        bestprof_data = bestprof_pointings.out.splitCsv()
+        // Only grab the pointings
+        pointings = bestprof_data.map{ point, name, dm, period -> point }
+    }
+    else {
+        println "No pointings given. Either use --pointing_file or --pointings. Exiting"
+        exit(1)
+    }
+
+    // Beamform
     pre_beamform()
     beamform(
-        pre_beamform.out[0],
-        pre_beamform.out[1],
-        pre_beamform.out[2],
-        bestprof_pointings.out.splitCsv().map{ it -> it[0] }.flatten().unique().collate( params.max_pointings )
+        pre_beamform.out.utc_beg_end_dur,
+        pre_beamform.out.channels,
+        pointings
     )
-    follow_up_fold(
-        beamform.out[1].map{ it -> [ it[0].getBaseName().split("/")[-1].split("_ch")[0], it ] }.cross(
-            bestprof_pointings.out.splitCsv().map{ it -> ["${params.obsid}_"+it[0], it[1], it[2]]}.map{ it -> [it[0].toString(), [it[1], it[2]]] }
+
+    // If doing follow up also do a fold
+    if ( params.bestprof_pointings ) {
+        // Grab name that includes DM so the ddplan will only use nearby DMs
+        bestprof_data_fits = bestprof_data.concat( beamform.out ).groupTuple()
+        // Do a follow up fold if bestprofs given
+        follow_up_fold(
+            bestprof_data_fits.map{ pointing, name_fits, dm, period -> [ name_fits[1], dm[0], period[0] ] }.view()
         )
-        .map{ it -> [it[0][1], it[1][1][0].split("_")[-1], it[1][1][1]] }
-    )
-    pulsar_search(
-        beamform.out[1].map{ it -> [ it[0].getBaseName().split("/")[-1].split("_ch")[0], it ] }.concat(
-            bestprof_pointings.out.splitCsv().map{ it -> ["${params.obsid}_"+it[0], it[1]]}
-        ).map{ it -> [it[0].toString(), it[1]] }
-        .groupTuple( size: 2 ).map{ it -> [it[1][1]+"_"+it[0], it[1][0]] }
-    )
-    classifier( pulsar_search.out[1].flatten().collate( 120 ) )
+        name_fits = bestprof_data_fits.map{ pointing, name_fits, dm, period -> name_fits }.view()
+    }
+    else {
+        // Make a name for each fits file
+        name_fits = beamform.out.map{ pointing, fits -> [ "${params.cand}_${params.obsid}_${pointing}", fits ] }
+    }
+
+    // Perform pulsar search
+    pulsar_search( name_fits )
+    classifier( pulsar_search.out )
 }

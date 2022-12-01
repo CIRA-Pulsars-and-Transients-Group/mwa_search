@@ -47,16 +47,10 @@ if ( params.pointing_file ) {
     pointings = Channel
         .fromPath(params.pointing_file)
         .splitCsv()
-        .collect()
-        .flatten()
-        .collate( params.max_pointings )
 }
 else if ( params.pointings ) {
     pointings = Channel
         .from(params.pointings.split(","))
-        .collect()
-        .flatten()
-        .collate( params.max_pointings )
 }
 else {
     println "No pointings given. Either use --pointing_file or --pointings. Exiting"

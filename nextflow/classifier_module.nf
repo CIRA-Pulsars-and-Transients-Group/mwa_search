@@ -1,8 +1,4 @@
-nextflow.enable.dsl = 2
 
-
-params.publish_all_classifer_cands = true
-params.out_dir = "${params.search_dir}/${params.obsid}_candidates"
 
 process feature_extract {
     label 'cpu'
@@ -58,8 +54,8 @@ process sort_detections {
     tuple path(pfd), path(bestprof), path(ps), path(png), path(fex_out), path(classifier_files)
 
     output:
-    path "positive_detections/*" optional true
-    path "negative_detections/*" optional true
+    path "positive_detections/*", optional: true, emit: positive
+    path "negative_detections/*", optional: true, emit: negative
 
     """
     LOTAAS_wrapper.py
@@ -83,13 +79,13 @@ workflow classifier {
     take:
         presto_candiates
     main:
-        presto_candiates.view()
+        presto_candiates
         // Collate into groups of 30 candidates
-        collated_cands = presto_candiates.collate( 30 ).view().map{ it.transpose() }.view()
+        collated_cands = presto_candiates.collate( 30 ).map{ it.transpose() }
         feature_extract( collated_cands )
         classify( feature_extract.out )
         sort_detections( classify.out )
     emit:
-        sort_detections.out[0]
-        sort_detections.out[1]
+        positive = sort_detections.out.positive
+        negative = sort_detections.out.negative
 }

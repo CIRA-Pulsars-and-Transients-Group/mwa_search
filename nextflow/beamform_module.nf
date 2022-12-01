@@ -1,47 +1,3 @@
-nextflow.enable.dsl=2
-
-//Calculate the max pointings used in the launched jobs
-if ( params.pointings ) {
-    max_job_pointings = params.pointings.split(",").size()
-    if ( max_job_pointings > params.max_pointings ) {
-        max_job_pointings = params.max_pointings
-    }
-}
-else {
-    // No input pointings (this happens in beamform_fov_sources.nf) so assuming max
-    max_job_pointings = params.max_pointings
-}
-
-//Work out total obs time
-if ( params.all ) {
-    // an estimation since there's no easy way to make this work
-    obs_length = 5400
-}
-else {
-    obs_length = params.end - params.begin + 1
-}
-
-//Calculate expected number of fits files
-n_fits = (int) (obs_length/200)
-if ( obs_length % 200 != 0 ) {
-    n_fits = n_fits + 1
-}
-
-
-//Beamforming ipfb duration calc
-mb_ipfb_dur = ( obs_length * (params.bm_read + 3 * (params.bm_cal + params.bm_beam) + params.bm_write) + 200 ) * 1.2
-
-//Beamforming duration calc
-mb_dur = ( obs_length * (params.bm_read + params.bm_cal + max_job_pointings * (params.bm_beam +params.bm_write)) + 200 ) * 1.2
-
-//Required temp SSD mem required for gpu jobs
-temp_mem = (int) (0.0012 * obs_length * max_job_pointings + 1)
-temp_mem_single = (int) (0.0024 * obs_length + 2)
-if ( ! params.summed ) {
-    temp_mem = temp_mem * 4
-    temp_mem_single = temp_mem_single *4
-}
-
 
 // Set up beamformer output types
 bf_out = " -p "
@@ -140,7 +96,7 @@ process make_beam {
     label 'gpu'
     label 'vcsbeam'
 
-    time "${mb_dur*task.attempt}s"
+    time "${ task.attempt * ( Float.valueOf(dur) * ( params.bm_read + params.bm_cal + points.size() * ( params.bm_beam + params.bm_write ) ) + 200 ) * 1.2 }s"
     errorStrategy 'retry'
     maxRetries 2
     maxForks params.max_gpu_jobs
@@ -176,7 +132,7 @@ process make_beam_ipfb {
     publishDir "${params.vcsdir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*hdr"
     publishDir "${params.vcsdir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*vdif"
 
-    time "${mb_ipfb_dur*task.attempt}s"
+    time "${ task.attempt * ( Float.valueOf(dur) * ( params.bm_read + params.bm_cal * ( params.bm_beam + params.bm_write ) ) + 200 ) * 1.2 }s"
     errorStrategy 'retry'
     maxRetries 2
     maxForks params.max_gpu_jobs
@@ -190,8 +146,7 @@ process make_beam_ipfb {
 
     output:
     tuple val(channel_id), val(point), path("*fits"), emit: fits
-    tuple val(channel_id), val(point), path("*hdr"),  emit: hdr
-    tuple val(channel_id), val(point), path("*vdif"), emit: vdif
+    tuple val(channel_id), val(point), path("*hdr"), path("*vdif"),  emit: vdif
 
     """
     if ${params.offringa}; then
@@ -218,7 +173,7 @@ process splice {
     label 'cpu'
     label 'vcstools'
 
-    publishDir "${params.vcsdir}/${params.obsid}/pointings/${unspliced[0].baseName.split("_")[2]}_${unspliced[0].baseName.split("_")[3]}", mode: 'copy', enabled: params.publish_fits
+    publishDir "${params.vcsdir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits
     time '3h'
     maxForks 300
     errorStrategy 'retry'
@@ -266,18 +221,15 @@ workflow beamform {
         pointings
     main:
         // Combine the each channel with each pointing (group) so you make a job for each combination
-        chan_point = channels.combine( pointings.collate( params.max_pointings ) )
+        chan_point = channels.combine( pointings.flatten().collate( params.max_pointings ).map{ [ it ] } )
         make_beam(
             utc_beg_end_dur,
             chan_point
         )
         // Use transpose to "flatten" out multiple pointings then group by the pointing for splicing
-        splice( make_beam.out.transpose().groupTuple( by: 1, size: 24 ) ).view()
-    // emit:
-    //     make_beam.out.flatten().map{ it -> [it.baseName.split("ch")[0], it ] }.groupTuple().map{ it -> it[1] }
-    //     splice.out[0].flatten().map{ it -> [it.baseName.split("ch")[0], it ] }.groupTuple().map{ it -> it[1] }
-    //     splice.out[1]
-    //     splice.out[0] | flatten() | map { it -> [it.baseName.split("_ch")[0].split("${params.obsid}_")[-1], it ] } | groupTuple()
+        splice( make_beam.out.transpose().groupTuple( by: 1, size: 24 ) )
+    emit:
+        splice.out // [ pointing, fits_file ]
 }
 
 workflow beamform_ipfb {
@@ -291,16 +243,14 @@ workflow beamform_ipfb {
         pointings
     main:
         // Combine the each channel with each pointing so you make a job for each combination
-        chan_point = channels.combine( pointings.flatten() )
+        chan_point = channels.combine( pointings.flatten().collate( params.max_pointings ).map{ [ it ] } )
         make_beam_ipfb(
             utc_beg_end_dur,
             chan_point
         )
         // Group by the pointing for splicing
         splice( make_beam.out.groupTuple( by: 1, size: 24 ) ).view()
-    // emit:
-    //     make_beam_ipfb.out[0].flatten().map{ it -> [it.baseName.split("ch")[0], it ] }.groupTuple().map{ it -> it[1] }
-    //     splice.out[0].flatten().map{ it -> [it.baseName.split("ch")[0], it ] }.groupTuple().map{ it -> it[1] }
-    //     splice.out[1]
-    //     splice.out[0] | flatten() | map { it -> [it.baseName.split("_ch")[0].split("${params.obsid}_")[-1], it ] } | groupTuple()
+    emit:
+        fits = splice.out // [ pointing, fits_file ]
+        vdif = make_beam_ipfb.out.vdif // [ channel_id, point, hdr, vdif ]
 }
