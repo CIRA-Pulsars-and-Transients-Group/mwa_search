@@ -243,13 +243,13 @@ workflow beamform_ipfb {
         pointings
     main:
         // Combine the each channel with each pointing so you make a job for each combination
-        chan_point = channels.combine( pointings.flatten().collate( params.max_pointings ).map{ [ it ] } )
+        chan_point = channels.combine( pointings.flatten().map{ [ it ] } )
         make_beam_ipfb(
             utc_beg_end_dur,
             chan_point
         )
         // Group by the pointing for splicing
-        splice( make_beam.out.groupTuple( by: 1, size: 24 ) ).view()
+        splice( make_beam_ipfb.out.fits.groupTuple( by: 1, size: 24 ) )
     emit:
         fits = splice.out // [ pointing, fits_file ]
         vdif = make_beam_ipfb.out.vdif // [ channel_id, point, hdr, vdif ]
