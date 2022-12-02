@@ -7,29 +7,36 @@ if ( params.help ) {
              |                  The fits files must be in the format
              |                  <obsid>_<pointing>_ch<min_chan>-<max_chan>_00??.fits
              |Required argurments:
-             |  --obsid     Observation ID you want to process   [no default]
-             |  --fits_file The fits file to search              [no default]
-             |  --dur       Duration of the fits file in seconds [no default]
+             |  --fits_file The fits file to search [no default]
              |
-             | Dedispersion arguments (optional):
+             |Dedispersion arguments (optional):
              |  --dm_min    Minimum DM to search over [default: ${params.dm_min}]
              |  --dm_max    Maximum DM to search over [default: ${params.dm_max}]
              |  --dm_min_step
-             |              Minimum DM step size (Delta DM) [default: ${params.dm_min_step }]
+             |              Minimum DM step size (Delta DM) [default: ${params.dm_min_step}]
              |  --dm_max_step
-             |              Maximum DM step size (Delta DM) [default: ${params.dm_max_step }]
+             |              Maximum DM step size (Delta DM) [default: ${params.dm_max_step}]
              |  --max_dms_per_job
              |              Maximum number of DM steps a single job will process.
              |              Lowering this will reduce memory usage and increase parellelisation.
              |              [default: ${params.max_dms_per_job}]
              |
+             |Pulsar search arguments (optional):
+             |  --sp        Perform only a single pulse search [default: ${params.sp }]
+             |  --cand      Label given to output files [default: ${params.cand }]
+             |  --nharm     Number of harmonics to search [default: ${params.nharm }]
+             |  --min_period
+             |              Min period to search for in sec (ANTF min = 0.0013)
+             |              [default: ${params.min_period }]
+             |  --max_period
+             |              Max period to search for in sec (ANTF max = 23.5)
+             |              [default: ${params.max_period }]
+             |  --zmax      Maximum acceleration to search (0 will do a simpler periodic search).
+             |              I recomend you use 200 and set --max_dms_per_job 32
+             |              [default: ${params.zmax }]
+             |
              |Optional arguments:
              |  --cand      Candidate name to do a targeted search [default: Blind]
-             |  --sp        Perform a single pulse search [default false]
-             |  --zmax      The acceleration range to search over. If you would like to perform
-             |              an acceleration search I recomend you use 200 and set
-             |              --max_dms_per_job 32
-             |              [default: 0 (no acceleration search)]
              |  --out_dir   Output directory for the candidates files
              |              [default: ${params.search_dir}/<obsid>_candidates]
              |  --mwa_search_version
@@ -40,11 +47,6 @@ if ( params.help ) {
     exit(0)
 }
 
-// Option parsing
-if ( params.obsid == null ) {
-    println("No obsid, please use --obsid. Exiting.")
-    exit(0)
-}
 if ( params.fits_file ) {
     fits_file = Channel.fromPath( "${params.fits_file}", checkIfExists: true )
     //nfiles = new File("${params.fits_file}").listFiles().findAll { it.name ==~ /.*fits/ }.size()
@@ -54,30 +56,12 @@ else {
     println("No fits file given, please use --fits_file. Exiting.")
     exit(0)
 }
-if ( params.dur ) {
-    params.begin = 1
-    params.end = params.dur
-}
-else {
-    println("No duration given, please use --dur. Exiting.")
-    exit(0)
-}
 
-// If doing an acceleration search, lower the number of DMs per job so the jobs don't time out
-if ( params.zmax == 0 ) {
-    total_dm_jobs = 6
-}
-else {
-    total_dm_jobs = 24
-    params.max_dms_per_job = 128
-}
-
-include {pulsar_search; single_pulse_search} from './pulsar_search_module'
-include { classifier }   from './classifier_module'
+include { pulsar_search; single_pulse_search } from './pulsar_search_module'
+include { classifier                         } from './classifier_module'
 
 workflow {
     if ( params.sp ) {
-        //single_pulse_search( fits_file.toSortedList().map{ it -> [ params.cand + '_' + it[0].getBaseName().split("/")[-1].split("_ch")[0], it ] }.view() )
         single_pulse_search( fits_file.map{ it -> [ params.cand + '_' + it.getBaseName().split("/")[-1].split("_ch")[0], it ] } )
     }
     else {

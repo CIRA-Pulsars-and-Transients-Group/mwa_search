@@ -138,7 +138,7 @@ process search_dd_fft_acc {
     fi
     printf "\\n#Dedispersing the time series at \$(date +"%Y-%m-%d_%H:%m:%S") --------------------------------------------\\n"
     prepsubband -ncpus ${task.cpus} -lodm ${ddplan[0]} -dmstep ${ddplan[2]} -numdms ${ddplan[3]} -zerodm -nsub ${ddplan[6]} \
--downsamp ${ddplan[5]} -numout \${numout} -o ${name} ${params.obsid}_*.fits
+-downsamp ${ddplan[5]} -numout \${numout} -o ${name} *.fits
     printf "\\n#Performing the FFTs at \$(date +"%Y-%m-%d_%H:%m:%S") -----------------------------------------------------\\n"
     realfft *dat
     printf "\\n#Performing the periodic search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
@@ -273,7 +273,7 @@ process search_dd {
     fi
     printf "\\n#Dedispersing the time series at \$(date +"%Y-%m-%d_%H:%m:%S") --------------------------------------------\\n"
     prepsubband -ncpus ${task.cpus} -lodm ${ddplan[0]} -dmstep ${ddplan[2]} -numdms ${ddplan[3]} -zerodm -nsub ${ddplan[6]} \
--downsamp ${ddplan[5]} -numout \${numout} -o ${name} ${params.obsid}_*.fits
+-downsamp ${ddplan[5]} -numout \${numout} -o ${name} *.fits
     printf "\\n#Performing the single pulse search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
     ${params.presto_python_load}
     single_pulse_search.py -p -m 0.5 -b *.dat
@@ -365,7 +365,7 @@ workflow single_pulse_search {
                    // Find for each ddplan match that with the fits files and the name key then change the format to [val(name), val(dm_values), path(fits_files)]
                    map{ it -> [it[1].init(), [[it[0], it[1].last()]]].combinations() }.flatMap().map{ it -> [it[1][0], it[0], it[1][1]]} )
         single_pulse_searcher( search_dd.out.map{ it -> [it[0], [it[1]].flatten().findAll { it != null } + [it[2]].flatten().findAll { it != null }] }.\
-                               groupTuple( size: total_dm_jobs, remainder: true).map{ it -> [it[0], it[1].flatten()] }.\
+                               groupTuple( remainder: true).map{ it -> [it[0], it[1].flatten()] }.\
                                // Add fits files
                                concat(name_fits_files).groupTuple( size: 2 ).map{ it -> [it[0], it[1][0], it[1][1]]}  )
         // Get all the inf and single pulse files and sort them into groups with the same basename (obsid_pointing)

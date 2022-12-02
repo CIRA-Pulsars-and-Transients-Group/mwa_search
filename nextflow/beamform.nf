@@ -8,33 +8,31 @@ if ( params.help ) {
              |Required argurments:
              |  --obsid     Observation ID you want to process [no default]
              |  --calid     Observation ID of calibrator you want to process [no default]
-             |  --pointings A comma sepertated list of pointings with the RA and Dec seperated
+             |  --begin     First GPS time to process [no default]
+             |  --end       Last GPS time to process [no default]
+             |  --all       Use entire observation span. Use instead of -b & -e. [default: ${params.all}]
+             |  --publish_fits
+             |              Publish to the fits files to the vcs subdirectory.
+             |
+             |Pointing arguments (one is required):
+             |  --pointings A comma-separated list of pointings with the RA and Dec separated
              |              by _ in the format HH:MM:SS_+DD:MM:SS, e.g.
              |              "19:23:48.53_-20:31:52.95,19:23:40.00_-20:31:50.00" [default: None]
              |  --pointing_file
-             |              A file containing pointings with the RA and Dec seperated by _
+             |              A file containing pointings with the RA and Dec separated by _
              |              in the format HH:MM:SS_+DD:MM:SS on each line, e.g.
              |              "19:23:48.53_-20:31:52.95\\n19:23:40.00_-20:31:50.00" [default: None]
-             |  --begin     First GPS time to process [no default]
-             |  --end       Last GPS time to process [no default]
-             |  --all       Use entire observation span. Use instead of -b & -e. [default: false]
-             |  --publish_fits
-             |              Publish to the fits directory (/group on Galaxy). Include this
-             |              option.
+             |
+             |Beamforming types arguments (optional):
+             |  --summed   Sum the Stoke paramters [default: ${params.summed}]
+             |  --incoh    Also produce an incoherent beam [default: ${params.incoh}]
+             |  --ipfb     Also produce a high time resolution Inverse Polyphase Filter Bank beam
+             |             [default: ${params.ipfb}]
+             |  --offringa Use offringa calibration solution instead of RTS [default: ${params.offringa}]
              |
              |Optional arguments:
-             |  --summed    Add this flag if you the beamformer output as summed polarisations
-             |              (only Stokes I). This reduces the data size by a factor of 4.
-             |              [default: False]
-             |  --ipfb      Perform an the inverse PFB to produce high time resolution beamformed
-             |              vdif files [default: false]
-             |  --publish_fits
-             |              Publish to the scratch fits directory (/astro on Galaxy). Use this
-             |              instead of --publish_fits
              |  --vcstools_version
-             |              The vcstools module version to use [default: master]
-             |  --mwa_search_version
-             |              The mwa_search module bersion to use [default: master]
+             |              The vcstools module version to use [default: ${params.vcstools_version}]
              |  --no_combined_check
              |              Don't check if all the combined files are available [default: false]
              |  -w          The Nextflow work directory. Delete the directory once the processs

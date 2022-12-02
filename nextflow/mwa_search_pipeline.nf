@@ -11,7 +11,7 @@ if ( params.help ) {
              |  --calid     Observation ID of calibrator you want to process [no default]
              |  --begin     First GPS time to process [no default]
              |  --end       Last GPS time to process [no default]
-             |  --all       Use entire observation span. Use instead of -b & -e. [default: false]
+             |  --all       Use entire observation span. Use instead of -b & -e. [default: ${params.all}]
              |
              |Pointing arguments (one is required):
              |  --pointings A comma-separated list of pointings with the RA and Dec separated
@@ -26,7 +26,14 @@ if ( params.help ) {
              |              follow up. The pipeline will beamform on their pointings, prepfold
              |              on their DM and period, and perform a blind search. [default: None]
              |
-             | Dedispersion arguments (optional):
+             |Beamforming types arguments (optional):
+             |  --summed   Sum the Stoke paramters [default: ${params.summed}]
+             |  --incoh    Also produce an incoherent beam [default: ${params.incoh}]
+             |  --ipfb     Also produce a high time resolution Inverse Polyphase Filter Bank beam
+             |             [default: ${params.ipfb}]
+             |  --offringa Use offringa calibration solution instead of RTS [default: ${params.offringa}]
+             |
+             |Dedispersion arguments (optional):
              |  --dm_min    Minimum DM to search over [default: ${params.dm_min}]
              |  --dm_max    Maximum DM to search over [default: ${params.dm_max}]
              |  --dm_min_step
@@ -38,26 +45,31 @@ if ( params.help ) {
              |              Lowering this will reduce memory usage and increase parellelisation.
              |              [default: ${params.max_dms_per_job}]
              |
-             |Optional arguments:
-             |  --summed    Add this flag if you the beamformer output as summed polarisations
-             |              (only Stokes I). This reduces the data size by a factor of 4.
-             |              [default: False]
-             |  --zmax      The acceleration range to search over. If you would like to perform
-             |              an acceleration search I recomend you use 200 and set
-             |              --max_dms_per_job 32
-             |              [default: 0 (no acceleration search)]
+             |Pulsar search arguments (optional):
+             |  --sp        Perform only a single pulse search [default: ${params.sp }]
+             |  --cand      Label given to output files [default: ${params.cand }]
+             |  --nharm     Number of harmonics to search [default: ${params.nharm }]
+             |  --min_period
+             |              Min period to search for in sec (ANTF min = 0.0013)
+             |              [default: ${params.min_period }]
+             |  --max_period
+             |              Max period to search for in sec (ANTF max = 23.5)
+             |              [default: ${params.max_period }]
+             |  --zmax      Maximum acceleration to search (0 will do a simpler periodic search).
+             |              I recomend you use 200 and set --max_dms_per_job 32
+             |              [default: ${params.zmax }]
+             |
+             |Other arguments (optional):
              |  --out_dir   Output directory for the candidates files
-             |              [default: ${params.search_dir}/<obsid>_candidates]
-             |  --ipfb      Perform an the inverse PFB to produce high time resolution beamformed
-             |              vdif files [default: false]
+             |              [default: ${params.out_dir}]
              |  --publish_fits
-             |              Publish to the fits directory (/group on Galaxy).
+             |              Publish to the fits files to the vcs subdirectory.
              |  --vcstools_version
-             |              The vcstools module version to use [default: master]
+             |              The vcstools module version to use [default: ${params.vcstools_version}]
              |  --mwa_search_version
-             |              The mwa_search module bersion to use [default: master]
+             |              The mwa_search module bersion to use [default: ${params.mwa_search_version}]
              |  --no_combined_check
-             |              Don't check if all the combined files are available [default: false]
+             |              Don't check if all the combined files are available [default: ${params.no_combined_check}]
              |  -w          The Nextflow work directory. Delete the directory once the processs
              |              is finished [default: ${workDir}]""".stripMargin()
     println(help)
