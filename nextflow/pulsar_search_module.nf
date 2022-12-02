@@ -356,19 +356,28 @@ workflow pulsar_search {
 
 workflow single_pulse_search {
     take:
-        name_fits_files
+        name_fits_files // [val(candidateName_obsid_pointing), path(fits_files)]
     main:
-        get_centre_freq()
-        ddplan( name_fits_files.map{ it -> it[0] }.combine(get_centre_freq.out.splitCsv()) )
-        search_dd( // combine the fits files and ddplan witht he matching name key (candidateName_obsid_pointing)
-                   ddplan.out.splitCsv().map{ it -> [ it[0], [ it[1], it[2], it[3], it[4], it[5], it[6], it[7] ] ] }.concat(name_fits_files).groupTuple().\
-                   // Find for each ddplan match that with the fits files and the name key then change the format to [val(name), val(dm_values), path(fits_files)]
-                   map{ it -> [it[1].init(), [[it[0], it[1].last()]]].combinations() }.flatMap().map{ it -> [it[1][0], it[0], it[1][1]]} )
-        single_pulse_searcher( search_dd.out.map{ it -> [it[0], [it[1]].flatten().findAll { it != null } + [it[2]].flatten().findAll { it != null }] }.\
-                               groupTuple( remainder: true).map{ it -> [it[0], it[1].flatten()] }.\
-                               // Add fits files
-                               concat(name_fits_files).groupTuple( size: 2 ).map{ it -> [it[0], it[1][0], it[1][1]]}  )
-        // Get all the inf and single pulse files and sort them into groups with the same basename (obsid_pointing)
+        // Grab meta data from the fits file
+        get_freq_and_dur( name_fits_files ) // [ name, fits_file, freq, dur ]
+
+        // Grab the meta data out of the CSV
+        name_fits_freq_dur = get_freq_and_dur.out.map { name, fits, meta -> [ name, fits, meta.splitCsv()[0][0], meta.splitCsv()[0][1] ] }
+        ddplan( name_fits_freq_dur )
+        // ddplan's output format is [ name, fits_file, centrefreq(MHz), duration(s), DDplan_file ]
+
+        // so split the csv to get the DDplan and transpose to make a job for each row of the plan
+        search_dd(
+            ddplan.out.map { name, fits, freq, dur, ddplan -> [ name, fits, freq, dur, ddplan.splitCsv() ] }.transpose()
+        )
+        // Output format: [ name,  presto_inf, single_pulse ]
+
+        // Get all the inf and single pulse files and sort them into groups with the same name key
+        inf_accel_sp_cand = search_dd.out.transpose().groupTuple()
+        // Combined the grouped single pulse files with the fits files
+        single_pulse_searcher(
+            inf_accel_sp_cand.map{ [ it[0], it[2] ] }.concat( name_fits_files ).groupTuple().map{ [ it[0], it[1][0], it[1][1] ] }
+        )
     emit:
         single_pulse_searcher.out[0]
         single_pulse_searcher.out[1]
