@@ -55,7 +55,7 @@ process ddplan {
     tuple val(name), path(fits_file), val(centre_freq), val(dur)
 
     output:
-    tuple val(name), path(fits_file), val(centre_freq), val(dur), path('DDplan.txt')
+    tuple val(name), path(fits_file), val(centre_freq), val(dur), path('DDplan*.txt')
 
     """
     #!/usr/bin/env python
@@ -91,10 +91,73 @@ process ddplan {
         output = dd_plan(${centre_freq}, 30.72, 3072, 0.1, dm_min, dm_max,
                          min_DM_step=${params.dm_min_step}, max_DM_step=${params.dm_max_step},
                          max_dms_per_job=${params.max_dms_per_job})
-    with open("DDplan.txt", "w") as outfile:
+
+    # Make a file for each work function batch
+    work_function_batch = []
+    wfi = 0
+    wf_sum = 0.
+    for dd_line in output:
+        dm_min, dm_max, dm_step, ndm, timeres, downsamp, nsub, total_work_factor = dd_line
+        while total_work_factor > ${params.max_work_function}:
+            # Ouput a file with just the max_work_function worth of DMs
+            wf_dm_step = int(${params.max_work_function} * downsamp)
+            with open(f"DDplan_{wfi}.txt", "w") as outfile:
+                spamwriter = csv.writer(outfile, delimiter=',')
+                spamwriter.writerow([
+                    dm_min,
+                    dm_min + dm_step * wf_dm_step,
+                    dm_step,
+                    wf_dm_step,
+                    timeres,
+                    downsamp,
+                    nsub,
+                    ${params.max_work_function}
+                ])
+            wfi += 1
+            # update dd_line for next part
+            dm_min = dm_min + dm_step * wf_dm_step
+            ndm -= wf_dm_step
+            total_work_factor -= ${params.max_work_function}
+
+        # Append the leftover to the batch list
+
+        # check if the batch list is ready to output
+        wf_sum += total_work_factor
+        if wf_sum > ${params.max_work_function}:
+            # Ouput file with multiple ddplan lines
+            with open(f"DDplan_{wfi}.txt", "w") as outfile:
+                spamwriter = csv.writer(outfile, delimiter=',')
+                for out_line in work_function_batch:
+                    spamwriter.writerow(out_line)
+                # Ouput final new line
+                wf_dm_step = int((wf_sum - ${params.max_work_function}) * downsamp)
+                spamwriter.writerow([
+                    dm_min,
+                    dm_min + dm_step * wf_dm_step,
+                    dm_step,
+                    wf_dm_step,
+                    timeres,
+                    downsamp,
+                    nsub,
+                    wf_sum - ${params.max_work_function}
+                ])
+                wfi += 1
+                work_function_batch = []
+
+            # Prepare new plan for next batch
+            wf_dm_step = int((wf_sum - ${params.max_work_function})  * downsamp)
+            dm_min = dm_min + dm_step * wf_dm_step
+            ndm -= wf_dm_step
+            total_work_factor -= (wf_sum - ${params.max_work_function})
+            wf_sum = 0
+
+        work_function_batch.append([dm_min, dm_max, dm_step, ndm, timeres, downsamp, nsub, total_work_factor])
+
+    # Write final file
+    with open(f"DDplan_{wfi}.txt", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
-        for o in output:
-            spamwriter.writerow(o)
+        for out_line in work_function_batch:
+            spamwriter.writerow(out_line)
     """
 }
 
@@ -104,41 +167,42 @@ process search_dd_fft_acc {
     label 'presto_search'
 
     // Max time is 24 hours for many clusters so always use less than that
-    time { search_time_estimate(dur, ddplan[3]) < 86400 ? \
-            "${search_time_estimate(dur, ddplan[3])}s" :
-            "86400s"}
+    time { search_time_estimate(dur, params.max_work_function) < 86400 ? \
+        "${search_time_estimate(dur, params.max_work_function)}s" :
+        "86400s"}
     memory { "${task.attempt * 30} GB"}
     maxRetries 2
     errorStrategy 'retry'
     maxForks params.max_search_jobs
 
     input:
-    tuple val(name), path(fits_files), val(freq), val(dur), val(ddplan)
-    // ddplan[0] = dm_min
-    // ddplan[1] = dm_max
-    // ddplan[2] = dm_step
-    // ddplan[3] = ndm
-    // ddplan[4] = timeres
-    // ddplan[5] = downsamp
-    // ddplan[6] = nsub
+    tuple val(name), path(fits_files), val(freq), val(dur), val(ddplans)
 
     output:
     tuple val(name), path("*ACCEL_${params.zmax}"), path("*.inf"), path("*.singlepulse"), path('*.cand')
-    //file "*ACCEL_0" optional true
-    //Will have to change the ACCEL_0 if I do an accelsearch
 
     """
-    echo "freq dur"
-    echo ${freq} ${dur}
-    echo "lowdm highdm dmstep ndms timeres downsamp"
-    echo ${ddplan[0]} ${ddplan[1]} ${ddplan[2]} ${ddplan[3]} ${ddplan[4]} ${ddplan[5]} ${ddplan[6]}
-    numout=${ (int) ( Float.valueOf( dur ) * 10000 / Float.valueOf( ddplan[5] ) ) }
-    if (( \$numout % 2 != 0 )) ; then
-        numout=\$(expr \$numout + 1)
-    fi
     printf "\\n#Dedispersing the time series at \$(date +"%Y-%m-%d_%H:%m:%S") --------------------------------------------\\n"
-    prepsubband -ncpus ${task.cpus} -lodm ${ddplan[0]} -dmstep ${ddplan[2]} -numdms ${ddplan[3]} -zerodm -nsub ${ddplan[6]} \
--downsamp ${ddplan[5]} -numout \${numout} -o ${name} *.fits
+    # Loop over ddplan lines
+    for ddplan in "${ddplans.join('" "').replace(", ", ",")}"; do
+        # cut off [ and ]
+        ddplan=\$( echo "\${ddplan}" | cut -d "[" -f 2 | cut -d "]" -f 1 )
+        echo \${ddplan}
+        # Split into each value
+        IFS=, read -r dm_min dm_max dm_step ndm timeres downsamp nsub wf <<< \${ddplan}
+        # Calculate the number of output data points
+        numout=\$(bc <<< "scale=0; ${dur} * 10000 + \${downsamp}")
+        numout=\$(printf "%.0f\n" "\${numout}")
+        if (( \$numout % 2 != 0 )) ; then
+            numout=\$(expr \$numout + 1)
+        fi
+        echo "Performing dedispersion with"
+        echo "    dm_min: \${dm_min}, dm_max: \${dm_max}, dm_step: \${dm_step}"
+        echo "    ndm: \${ndm}, timeres: \${timeres}, downsamp: \${downsamp}, nsub: \${nsub},"
+        prepsubband -ncpus ${task.cpus} -lodm \${dm_min} -dmstep \${dm_step} -numdms \${ndm} -zerodm -nsub \${nsub} \
+-downsamp \${downsamp} -numout \${numout} -o ${name} *.fits
+    done
+
     printf "\\n#Performing the FFTs at \$(date +"%Y-%m-%d_%H:%m:%S") -----------------------------------------------------\\n"
     realfft *dat
     printf "\\n#Performing the periodic search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
@@ -146,10 +210,10 @@ process search_dd_fft_acc {
         # Somtimes this has a 255 error code when data.pow == 0 so ignore it
         accelsearch -ncpus ${task.cpus} -zmax ${params.zmax} -flo ${min_f_harm} -fhi ${max_f_harm} -numharm ${params.nharm} \${i%.dat}.fft || true
     done
+
     printf "\\n#Performing the single pulse search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
     ${params.presto_python_load}
     single_pulse_search.py -p -m 0.5 -b *.dat
-    # cat *.singlepulse > ${name}_DM${ddplan[0]}-${ddplan[1]}.subSpS
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%m:%S") ----------------------------------------------------------------\\n"
     """
 }
@@ -241,43 +305,44 @@ process search_dd {
     label 'cpu'
     label 'presto_search'
 
-    time { search_time_estimate(dur, ddplan[3]) < 86400 ? \
-            "${search_time_estimate(dur, ddplan[3])}s" :
-            "86400s"}
+    time { search_time_estimate(dur, params.max_work_function) < 86400 ? \
+        "${search_time_estimate(dur, params.max_work_function)}s" :
+        "86400s"}
     memory { "${task.attempt * 3} GB"}
     maxRetries 2
     maxForks params.max_search_jobs
 
     input:
-    tuple val(name), path(fits_files), val(freq), val(dur), val(ddplan)
-    // ddplan[0] = dm_min
-    // ddplan[1] = dm_max
-    // ddplan[2] = dm_step
-    // ddplan[3] = ndm
-    // ddplan[4] = timeres
-    // ddplan[5] = downsamp
-    // ddplan[6] = nsub
+    tuple val(name), path(fits_files), val(freq), val(dur), val(ddplans)
 
     output:
     tuple val(name), path("*.inf"), path("*.singlepulse")
-    //Will have to change the ACCEL_0 if I do an accelsearch
 
     """
-    echo "freq dur"
-    echo ${freq} ${dur}
-    echo "lowdm highdm dmstep ndms timeres downsamp"
-    echo ${ddplan[0]} ${ddplan[1]} ${ddplan[2]} ${ddplan[3]} ${ddplan[4]} ${ddplan[5]} ${ddplan[6]}
-    numout=${ (int) ( Float.valueOf( dur ) * 10000 / Float.valueOf( ddplan[5] ) ) }
-    if (( \$numout % 2 != 0 )) ; then
-        numout=\$(expr \$numout + 1)
-    fi
     printf "\\n#Dedispersing the time series at \$(date +"%Y-%m-%d_%H:%m:%S") --------------------------------------------\\n"
-    prepsubband -ncpus ${task.cpus} -lodm ${ddplan[0]} -dmstep ${ddplan[2]} -numdms ${ddplan[3]} -zerodm -nsub ${ddplan[6]} \
--downsamp ${ddplan[5]} -numout \${numout} -o ${name} *.fits
+    # Loop over ddplan lines
+    for ddplan in "${ddplans.join('" "').replace(", ", ",")}"; do
+        # cut off [ and ]
+        ddplan=\$( echo "\${ddplan}" | cut -d "[" -f 2 | cut -d "]" -f 1 )
+        echo \${ddplan}
+        # Split into each value
+        IFS=, read -r dm_min dm_max dm_step ndm timeres downsamp nsub wf <<< \${ddplan}
+        # Calculate the number of output data points
+        numout=\$(bc <<< "scale=0; ${dur} * 10000 + \${downsamp}")
+        numout=\$(printf "%.0f\n" "\${numout}")
+        if (( \$numout % 2 != 0 )) ; then
+            numout=\$(expr \$numout + 1)
+        fi
+        echo "Performing dedispersion with"
+        echo "    dm_min: \${dm_min}, dm_max: \${dm_max}, dm_step: \${dm_step}"
+        echo "    ndm: \${ndm}, timeres: \${timeres}, downsamp: \${downsamp}, nsub: \${nsub},"
+        prepsubband -ncpus ${task.cpus} -lodm \${dm_min} -dmstep \${dm_step} -numdms \${ndm} -zerodm -nsub \${nsub} \
+-downsamp \${downsamp} -numout \${numout} -o ${name} *.fits
+    done
+
     printf "\\n#Performing the single pulse search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
     ${params.presto_python_load}
     single_pulse_search.py -p -m 0.5 -b *.dat
-    # cat *.singlepulse > ${name}_DM${ddplan[0]}-${ddplan[1]}.subSpS
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%m:%S") ----------------------------------------------------------------\\n"
     """
 }
@@ -321,7 +386,7 @@ workflow pulsar_search {
 
         // so split the csv to get the DDplan and transpose to make a job for each row of the plan
         search_dd_fft_acc(
-            ddplan.out.map { name, fits, freq, dur, ddplan -> [ name, fits, freq, dur, ddplan.splitCsv() ] }.transpose()
+            ddplan.out.transpose().map { name, fits, freq, dur, ddplan -> [ name, fits, freq, dur, ddplan.splitCsv() ] }
         )
         // Output format: [ name,  ACCEL_summary, presto_inf, single_pulse, periodic_candidates ]
 
