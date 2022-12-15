@@ -442,12 +442,15 @@ workflow single_pulse_search {
 
         // so split the csv to get the DDplan and transpose to make a job for each row of the plan
         search_dd(
-            ddplan.out.map { name, fits, freq, dur, ddplan -> [ name, fits, freq, dur, ddplan.splitCsv() ] }.transpose()
+            ddplan.out.transpose()
+            .map { name, fits, freq, dur, ddplan ->
+                [ groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
+            }
         )
         // Output format: [ name,  presto_inf, single_pulse ]
 
         // Get all the inf and single pulse files and sort them into groups with the same name key
-        inf_accel_sp_cand = search_dd.out.transpose().groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel, inf, sp, cands ] }
+        inf_accel_sp_cand = search_dd.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel - null, inf, sp, cands - null ] }
         // Combined the grouped single pulse files with the fits files
         single_pulse_searcher(
             inf_accel_sp_cand.map{ [ it[0], it[2] ] }.concat( name_fits_files ).groupTuple().map{ [ it[0], it[1][0], it[1][1] ] }
