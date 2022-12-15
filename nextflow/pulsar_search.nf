@@ -48,7 +48,7 @@ if ( params.help ) {
 }
 
 if ( params.fits_file ) {
-    fits_file = Channel.fromPath( "${params.fits_file}", checkIfExists: true )
+    fits_file = Channel.fromPath( "${params.fits_file}", checkIfExists: true ).flatten()
     //nfiles = new File("${params.fits_file}").listFiles().findAll { it.name ==~ /.*fits/ }.size()
     fits_file.view( it -> "Running search on ${it}" )
 }
@@ -62,10 +62,10 @@ include { classifier                         } from './classifier_module'
 
 workflow {
     if ( params.sp ) {
-        single_pulse_search( fits_file.map{ it -> [ params.cand + '_' + it.getBaseName().split("/")[-1].split("_ch")[0], it ] } )
+        single_pulse_search( fits_file.map{ it -> [ params.cand + '_' + it.baseName.split("_ch")[0], it ] } )
     }
     else {
-        pulsar_search( fits_file.toSortedList().map{ it -> [ params.cand + '_' + it[0].getBaseName().split("/")[-1].split("_ch")[0], it ] } )
+        pulsar_search( fits_file.map{ it -> [ params.cand + '_' + it.baseName.split("_ch")[0], it ] } )
         classifier( pulsar_search.out )
     }
 }

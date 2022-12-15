@@ -60,9 +60,10 @@ process ddplan {
     """
     #!/usr/bin/env python
 
+    import csv
+    import numpy as np
     from vcstools.catalogue_utils import grab_source_alog
     from mwa_search.dispersion_tools import dd_plan
-    import csv
 
     if '${name}'.startswith('Blind'):
         output = dd_plan(${centre_freq}, 30.72, 3072, 0.1, ${params.dm_min}, ${params.dm_max},
@@ -96,12 +97,13 @@ process ddplan {
     work_function_batch = []
     wfi = 0
     wf_sum = 0.
+    total_dm_steps = int(np.array(output).sum(axis=0)[3])
     for dd_line in output:
         dm_min, dm_max, dm_step, ndm, timeres, downsamp, nsub, total_work_factor = dd_line
         while total_work_factor > ${params.max_work_function}:
             # Ouput a file with just the max_work_function worth of DMs
             wf_dm_step = int(${params.max_work_function} * downsamp)
-            with open(f"DDplan_{wfi}.txt", "w") as outfile:
+            with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{wf_dm_step}.txt", "w") as outfile:
                 spamwriter = csv.writer(outfile, delimiter=',')
                 spamwriter.writerow([
                     dm_min,
@@ -125,12 +127,13 @@ process ddplan {
         wf_sum += total_work_factor
         if wf_sum > ${params.max_work_function}:
             # Ouput file with multiple ddplan lines
-            with open(f"DDplan_{wfi}.txt", "w") as outfile:
+            wf_dm_step = int((wf_sum - ${params.max_work_function}) * downsamp)
+            local_dm_steps = int(wf_dm_step + np.array(work_function_batch).sum(axis=0)[3])
+            with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{local_dm_steps}.txt", "w") as outfile:
                 spamwriter = csv.writer(outfile, delimiter=',')
                 for out_line in work_function_batch:
                     spamwriter.writerow(out_line)
                 # Ouput final new line
-                wf_dm_step = int((wf_sum - ${params.max_work_function}) * downsamp)
                 spamwriter.writerow([
                     dm_min,
                     dm_min + dm_step * wf_dm_step,
@@ -154,7 +157,8 @@ process ddplan {
         work_function_batch.append([dm_min, dm_max, dm_step, ndm, timeres, downsamp, nsub, total_work_factor])
 
     # Write final file
-    with open(f"DDplan_{wfi}.txt", "w") as outfile:
+    local_dm_steps = int(np.array(work_function_batch).sum(axis=0)[3])
+    with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{local_dm_steps}.txt", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
         for out_line in work_function_batch:
             spamwriter.writerow(out_line)
@@ -176,7 +180,7 @@ process search_dd_fft_acc {
     maxForks params.max_search_jobs
 
     input:
-    tuple val(name), path(fits_files), val(freq), val(dur), val(ddplans)
+    tuple val(name), path(fits_files), val(freq), val(dur), val(ndms_job), val(ddplans)
 
     output:
     tuple val(name), path("*ACCEL_${params.zmax}"), path("*.inf"), path("*.singlepulse"), path('*.cand')
@@ -269,7 +273,6 @@ process prepfold {
     tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png")//, optional: true) // some PRESTO installs don't make pngs
 
     //no mask command currently
-    //${cand_line.split()[0].substring(0, cand_line.split()[0].lastIndexOf(":")) + '.cand'}
     """
     echo "${cand_line.split()}"
     # Set up the prepfold options to match the ML candidate profiler
@@ -313,7 +316,7 @@ process search_dd {
     maxForks params.max_search_jobs
 
     input:
-    tuple val(name), path(fits_files), val(freq), val(dur), val(ddplans)
+    tuple val(name), path(fits_files), val(freq), val(dur), val(ndms_job), val(ddplans)
 
     output:
     tuple val(name), path("*.inf"), path("*.singlepulse")
@@ -384,14 +387,20 @@ workflow pulsar_search {
         ddplan( name_fits_freq_dur )
         // ddplan's output format is [ name, fits_file, centrefreq(MHz), duration(s), DDplan_file ]
 
-        // so split the csv to get the DDplan and transpose to make a job for each row of the plan
+        // Trasponse to get a DM plan file each row/job then split the csv to get the DDplan
+        // Also using groupKey so that future groupTuple will have the size of the total number of DMs
+        // The DDplan file has the name format DDplan_{i}_a{total_dm_steps}_n{local_dm_steps}.txt
         search_dd_fft_acc(
-            ddplan.out.transpose().map { name, fits, freq, dur, ddplan -> [ name, fits, freq, dur, ddplan.splitCsv() ] }
+            ddplan.out.transpose()
+            .map { name, fits, freq, dur, ddplan ->
+                [ groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
+            }
         )
         // Output format: [ name,  ACCEL_summary, presto_inf, single_pulse, periodic_candidates ]
 
         // Get all the inf, ACCEL and single pulse files and sort them into groups with the same name key
-        inf_accel_sp_cand = search_dd_fft_acc.out.transpose().groupTuple()
+        // This uses the groupKey so it should output the channel as soon as it has all the DMs
+        inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel - null, inf, sp, cands - null ] }
         accelsift( inf_accel_sp_cand )
 
         // For each line of each candidate file and treat it as a candidate
@@ -404,7 +413,7 @@ workflow pulsar_search {
         accel_inf_cands = accel_cands.cross( inf_cands )
             // Reorganise it so it's back to the just name key style
             .map{ [ it[0][0].split("_DM")[0], it[0][1], it[1][1], it[1][2] ] }
-        // Pair them with fits files and metadata so they are read to fole
+        // Pair them with fits files and metadata so they are read to fole+
         cands_for_prepfold = name_fits_freq_dur.cross( accel_inf_cands )
             .map{ [ it[0][0], it[0][1], it[0][3], it[1][1], it[1][2], it[1][3] ] }
             // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
@@ -438,7 +447,7 @@ workflow single_pulse_search {
         // Output format: [ name,  presto_inf, single_pulse ]
 
         // Get all the inf and single pulse files and sort them into groups with the same name key
-        inf_accel_sp_cand = search_dd.out.transpose().groupTuple()
+        inf_accel_sp_cand = search_dd.out.transpose().groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel, inf, sp, cands ] }
         // Combined the grouped single pulse files with the fits files
         single_pulse_searcher(
             inf_accel_sp_cand.map{ [ it[0], it[2] ] }.concat( name_fits_files ).groupTuple().map{ [ it[0], it[1][0], it[1][1] ] }
