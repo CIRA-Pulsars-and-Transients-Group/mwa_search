@@ -11,6 +11,8 @@ Welcome to mwa_search's documentation!
    smart_processing
    candidate_follow_up
 
+   smart_database
+
    nextflow_scripts
 
    dpp_scripts
