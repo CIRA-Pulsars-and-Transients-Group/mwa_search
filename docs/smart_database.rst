@@ -16,7 +16,7 @@ This is possible to the extent to which the above-mentioned paradigm is adhered 
 In principle, it should be possible for ``mwa_search`` not to know *anything* about the SMART processing pipeline; it should all be inferable from the contents of the Database itself.
 
 This lofty goal, however, has not yet been reached; for now, the burden of *defining* the SMART processing pipeline still rests on **this** repo (and in particular, in **this** documentation).
-But instead of trying to document the use of the Database generally, this documentation describes how **the second pass** of the SMART survey can be defined, with the hope that it may serve as an example, or a template, of how future "passes" (or indeed, other surveys) might be similarly constructed.
+But instead of trying to document the use of the Database generally, this documentation includes some representative examples of how some aspects of the SMART survey can be defined, with the hope that it becomes clear how to extend this example to all other aspects of defining the survey in the Database, and then *using* the defined survey in ``mwa_search``'s NextFlow scripts.
 
 Template for NextFlow processes
 -------------------------------
