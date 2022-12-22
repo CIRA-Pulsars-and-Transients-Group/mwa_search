@@ -194,11 +194,9 @@ Using the latter method is a matter of taste.
    This script and all other scripts that interface with the database require a "token" and a "base url" to be granted authorisation access to the Database (hosted at "base url").
    See the ``--help`` docstring of these scripts for more information.
 
-Example
-^^^^^^^
+**Example of command line usage:**
 
 .. code-block::
-   :caption: An example of command line usage
 
    $ get_algorithm_settings.py --token=$SMART_TOKEN --base_url=$SMART_BASE_URL first_pass followup_pointings --pretty
    deg_fwhm 0.3
@@ -211,7 +209,7 @@ Example
    n_pointings 1080
 
 Handling variable parameter settings
-------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In some cases, the input parameters needed by the NextFlow processes depend not only on certain pre-decided and fixed settings, but also on values that change from processing job to processing job.
 For example, one difference between the first and second passes is the amount of observational data that is processed, which in turn changes the number of tied-array beam pointings that are used.
@@ -304,7 +302,7 @@ Everything else is determined from values stored within the database.
 .. _config_files:
 
 Using configuration files as collections of parameters
-------------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 For some SMART workflows, it may be convenient to store multiple algorithm parameters in a single downloadable file that is stored in the database.
 This is especially true if the software that is run during a process accepts configuration files themselves as inputs, in which case there is little sense breaking apart the contents of the configuration file into parameters to be stored individually in the Database.
