@@ -16,7 +16,7 @@ This is possible to the extent to which the above-mentioned paradigm is adhered 
 In principle, it should be possible for ``mwa_search`` not to know *anything* about the SMART processing pipeline; it should all be inferable from the contents of the Database itself.
 
 This lofty goal, however, has not yet been reached; for now, the burden of *defining* the SMART processing pipeline still rests on **this** repo (and in particular, in **this** documentation).
-But instead of trying to document the use of the Database generally, this documentation describes how **the second pass** of the SMART survey is defined, with the hope that it may serve as an example, or a template, of how future "passes" (or indeed, other surveys) might be similarly constructed.
+But instead of trying to document the use of the Database generally, this documentation describes how **the second pass** of the SMART survey can be defined, with the hope that it may serve as an example, or a template, of how future "passes" (or indeed, other surveys) might be similarly constructed.
 
 Template for NextFlow processes
 -------------------------------
@@ -184,7 +184,7 @@ Using Database-defined parameters in NextFlow processes
 The tool for retrieving defined algorithm settings from the Database is the ``scripts/smart_database/get_algorithm_settings.py`` script.
 It takes as required inputs a survey chapter name and the name of an algorithm, and will return all algorithm settings that match those two constraints.
 
-The script can be called from the command line, in which case the results of the query are written to stdout, or it can be imported as a python module, in which case the ``get_algorithm_settings()`` function returns a list of dictionaries whose keys are ``algorithm_parameter__name`` and ``value``.
+The script can be called from the command line, in which case the results of the query are written to stdout, or it can be imported as a python module, in which case the ``get_algorithm_settings()`` function returns a list of dictionaries whose keys are ``algorithm_parameter__name``, ``value``, and ``config_file`` (discussed below [TODO: add link to section]).
 Calling the script from the command line is necessary when the NextFlow process that depends on those values involves calls to external software.
 However, if the process uses scripts in ``mwa_search`` (such as ``grid.py``), then the scripts themselves may import ``get_algorithm_settings.py`` directly and use the dictionary is later processing.
 Using the latter method is a matter of taste.
@@ -209,3 +209,64 @@ Example
    deg_fwhm 0.3
    fraction 0.9
    n_pointings 1080
+
+Handling variable parameter settings
+------------------------------------
+
+In some cases, the input parameters needed by the NextFlow processes depend not only on certain pre-decided and fixed settings, but also on values that change from processing job to processing job.
+For example, one difference between the first and second passes is amount of observational data that is processed, which in turn changes the number of tied-array beam pointings that are used.
+The actual parameters that ``grid.py`` is expecting include ``--begin`` and ``--end`` times, which not only differ from survey chapter to survey chapter, but also from observation to observation.
+The ``AlgorithmSetting`` table is only designed for fixed values, so in this case the best approach is to invent a custom parameter that provides a high-level distinction between the various possibilities, and to implement the logic to interpret those values for specific processes locally.
+
+In this example, we might define a pair of parameters as follows:
+
+.. list-table:: AlgorithmParameter table
+   :widths: 25 25 50
+   :header-rows: 1
+
+   * - Name
+     - Algorithms
+     - Description
+   * - skip_nseconds
+     - | search_pointings
+       | followup_pointings
+     - Skip the first N seconds of the observation
+   * - process_nseconds
+     - | search_pointings
+       | followup_pointings
+     - Process only N seconds of the observation
+
+These two parameters would very likely also be used in other algorithms apart from the two listed here (e.g. for the processes that actually *do* the beamforming), but this example is just limited to the algorithms already introduced in the previous sections.
+
+With these defined parameters, the ``AlgorithmSetting`` table would need the following values defined for the first pass (which uses the first ten minutes of each observation) and second pass (which uses the whole observation):
+
+.. list-table:: AlgorithmSetting table
+   :widths: 25 75
+   :header-rows: 1
+
+   * - Algorithm parameter
+     - Value
+   * - skip_nseconds
+     - 0
+   * - process_nseconds
+     - 600
+   * - process_nseconds
+     - all
+
+These are then tied to survey chapters in the usual way:
+
+.. list-table:: SurveyChapter table
+   :widths: 25 75
+   :header-rows: 1
+
+   * - Name
+     - Algorithm settings
+   * - first_pass
+     - | skip_nseconds = 0
+       | process_nseconds = 600
+   * - second_pass
+     - | skip_nseconds = 0
+       | process_nseconds = all
+
+The actual values that need to be passed into ``grid.py`` must now be worked out from these definitions inside the NextFlow script that calls ``grid.py``.
+However, the ``--begin`` and ``--end`` values also depend on which observation is being "gridded", and while the observation itself is necessarily provided by the user, the information needed to calculate these values must *also* be retrieved from the database (in this case, the "start_time" and "stop_time" fields of the ``Observation`` table).

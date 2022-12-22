@@ -44,7 +44,7 @@ def main():
 
     if args.pretty:
         for a in algorithm_settings:
-            print(a['algorithm_parameter__name'], a['value'])
+            print(a['algorithm_parameter__name'], a['value'], a['config_file'])
     else:
         print(algorithm_settings)
 
