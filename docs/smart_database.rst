@@ -176,7 +176,36 @@ Thus, we now update the rows for the first and second pass accordingly:
        | n_pointings = 1080
 
 .. note::
-   The Django admin interface allows for the "dynamic" adding of entries of  fields by using the "+" button, which can streamline the data-entry process.
+   The Django admin interface allows for the "dynamic" adding of entries of fields by using the "+" button, which can streamline the data-entry process.
 
 Using Database-defined parameters in NextFlow processes
 -------------------------------------------------------
+
+The tool for retrieving defined algorithm settings from the Database is the ``scripts/smart_database/get_algorithm_settings.py`` script.
+It takes as required inputs a survey chapter name and the name of an algorithm, and will return all algorithm settings that match those two constraints.
+
+The script can be called from the command line, in which case the results of the query are written to stdout, or it can be imported as a python module, in which case the ``get_algorithm_settings()`` function returns a list of dictionaries whose keys are ``algorithm_parameter__name`` and ``value``.
+Calling the script from the command line is necessary when the NextFlow process that depends on those values involves calls to external software.
+However, if the process uses scripts in ``mwa_search`` (such as ``grid.py``), then the scripts themselves may import ``get_algorithm_settings.py`` directly and use the dictionary is later processing.
+Using the latter method is a matter of taste.
+
+.. note::
+
+   This script and all other scripts that interface with the database require a "token" and a "base url" to be granted authorisation access to the Database (hosted at "base url").
+   See the ``--help`` docstring of these scripts for more information.
+
+Example
+^^^^^^^
+
+.. code-block::
+   :caption: An example of command line usage
+
+   $ get_algorithm_settings.py --token=$SMART_TOKEN --base_url=$SMART_BASE_URL first_pass followup_pointings --pretty
+   deg_fwhm 0.3
+   fraction 1.2
+   n_pointings 1080
+
+   $ get_algorithm_settings.py --token=$SMART_TOKEN --base_url=$SMART_BASE_URL second_pass followup_pointings --pretty
+   deg_fwhm 0.3
+   fraction 0.9
+   n_pointings 1080

@@ -24,8 +24,11 @@ def get_algorithm_settings(survey_chapter, algorithm, token=None, base_url=None)
 def main():
     # Parse command line options
     parser = argparse.ArgumentParser(description='Poll the SMART database for the settings used for a given survey chapter and algorithm')
-    parser.add_argument('--token', help='Your authentication token for access to the SMART database. If not supplied, the value of the environment variable SMART_TOKEN is used.')
-    parser.add_argument('--base_url', help='The base URL for the SMART database. If not supplied, the value of the environment variable SMART_BASE_URL is used.')
+
+    # Add the standard database-authentication options
+    smart.add_standard_args(parser)
+
+    # Add other arguments specific to this script
     parser.add_argument('survey_chapter', help='Filter the results by the supplied survey chapter.')
     parser.add_argument('algorithm', help='Filter the results by the supplied algorithm')
     parser.add_argument('--pretty', action='store_true', help="Print the values to the screen in a human-readable format")

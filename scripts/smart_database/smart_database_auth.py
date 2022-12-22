@@ -58,3 +58,10 @@ class Session():
 
     def __del__(self):
         self.session.close()
+
+def add_standard_args(parser):
+    '''
+    Adds "token" and "base_url" arguments to the supplied parser
+    '''
+    parser.add_argument('--token', help='Your authentication token for access to the SMART database. If not supplied, the value of the environment variable SMART_TOKEN is used.')
+    parser.add_argument('--base_url', help='The base URL for the SMART database. If not supplied, the value of the environment variable SMART_BASE_URL is used.')
