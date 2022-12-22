@@ -53,7 +53,10 @@ This is just an example: some details laid out in this section may become obsole
 Thus, in cases where the Database diverges from this documentation, the Database should be considered definitive.
 
 There is (by design) no public-facing API for editing the tables that relate to defining the survey passes (also known as "survey chapters").
-Database administrators can (and should) edit these fields directly using the Django admin site (.../admin/).
+Database administrators can (and should) edit these fields directly using the Django admin site (``http://.../admin/``).
+
+Survey chapters
+^^^^^^^^^^^^^^^
 
 New survey chapters can be created by entering new rows in the ``SurveyChapter`` table:
 
@@ -71,15 +74,16 @@ New survey chapters can be created by entering new rows in the ``SurveyChapter``
 The ``Algorithm settings`` field is a many-to-many relation, and the values that will eventually go here collectively *define* the second pass.
 This can be initially left blank and only populated after the algorithm settings themselves have been defined.
 
-Defining algorithms
-^^^^^^^^^^^^^^^^^^^
+Algorithms
+^^^^^^^^^^
 
 The ``Algorithm`` table can be used to group blocks of processing tasks together (or really, to *define* them).
 **For SMART, we interpret ``Algorithms`` to be the Database analogue of the NextFlow process, and specify that there must be a one-to-one correspondence between the two.**
 
-For example, both the first and second passes use a process for generating a list of pointings for the tied-array beams that are used for the initial search.
+For example, both the first and second passes require a process for generating a list of pointings for the tied-array beams that are used either for the initial search or for follow-up searches.
 The script that is used to generate this list is ``scripts/mwa_search/grid.py`` (included in this repo), which requires several input parameters to be defined.
-Suppose that this script is
+Suppose that this script is called from two NextFlow processes called "search_pointings" and "followup_pointings".
+Then, we would add two entries to the ``Algorithm`` table as follows:
 
 .. list-table:: Algorithm table
    :widths: 25 75
@@ -93,11 +97,15 @@ Suppose that this script is
    * - followup_pointings
      - | Generate a list of pointings for forming tied-array beams
        | specifically for following up individual candidates
-   * - ...
-     - ...
 
-Algorithms, conceptually, are really lists of parameters, and this is embodied in the Database as a many-to-many relation between the ``Algorithm`` table and the ``AlgorithmParameter`` table.
-Parameters for the above-listed algorithms are
+These algorithms must now be defined.
+
+Algorithm parameters
+^^^^^^^^^^^^^^^^^^^^
+
+Algorithms, conceptually, are really just lists of parameters, and this is embodied in the Database as a many-to-many relation between the ``Algorithm`` table and the ``AlgorithmParameter`` table.
+Since we have mandated (for SMART) that "algorithms" have a one-to-one correspondence to NextFlow processes, "algorithm parameters" should map to options that are needed *by* those processes.
+In this example, this will necessarily include options that get passed to the ``grid.py`` script, which we therefore add to the ``AlgorithmParameter`` table:
 
 .. list-table:: AlgorithmParameter table
    :widths: 25 25 50
@@ -118,15 +126,21 @@ Parameters for the above-listed algorithms are
    * - n_pointings
      - | followup_pointings
        | search_pointings
-     - | Number of pointings per output file
-   * - ...
-     - ...
-     - ...
+     - Number of pointings per output file
+
+Algorithm settings
+^^^^^^^^^^^^^^^^^^
 
 Note that the algorithm parameters have not yet been assigned values.
 This is because although the parameters themselves are defined by the algorithms, the specific values that are used depend on the survey chapter.
 Linking specific parameter values to different survey chapters is the job of the ``AlgorithmSetting`` table, which effectively acts as a join table between ``AlgorithmParameter`` and ``SurveyChapter``.
-However, the many-to-many relation between ``SurveyChapter`` and ``AlgorithmSetting`` is defined in the Database as a ``ManyToManyField`` in the ``SurveyChapter`` model, so implementing specific values for algorithm parameters (via the Django admin interface) involves two steps: (1) creating entries in the ``AlgorithmSetting`` table that define the values, and (2) adding those entries to the appropriate field in the ``SurveyChapter`` table.
+However, the many-to-many relation between ``SurveyChapter`` and ``AlgorithmSetting`` is defined in the Database as a ``ManyToManyField`` in the ``SurveyChapter`` model, so assigning specific values to algorithm parameters is a two-step process:
+
+1. Create entries in the ``AlgorithmSetting`` table that define the values,
+2. Add those entries to the "Algorithm settings" field of the appropriate row in the ``SurveyChapter`` table.
+
+For example, suppose that both first and second passes used the same parameter values except that the first pass uses a wider spacing of pointings than the second pass, which is reflected by a different value for the "fraction" parameter (1.2 for first pass, 0.9 for second pass).
+We might therefore add the following parameters to the ``AlgorithmSettings`` table:
 
 .. list-table:: AlgorithmSetting table (only the fields used in this example are shown)
    :widths: 25 75
@@ -138,8 +152,13 @@ However, the many-to-many relation between ``SurveyChapter`` and ``AlgorithmSett
      - 0.3
    * - fraction
      - 0.9
+   * - fraction
+     - 1.2
    * - n_pointings
      - 1080
+
+These settings will now be available for selection within the ``SurveyChapter`` table.
+Thus, we now update the rows for the first and second pass accordingly:
 
 .. list-table:: SurveyChapter table
    :widths: 25 75
@@ -147,7 +166,17 @@ However, the many-to-many relation between ``SurveyChapter`` and ``AlgorithmSett
 
    * - Name
      - Algorithm settings
+   * - first_pass
+     - | deg_fwhm = 0.3
+       | fraction = 1.2
+       | n_pointings = 1080
    * - second_pass
      - | deg_fwhm = 0.3
        | fraction = 0.9
        | n_pointings = 1080
+
+.. note::
+   The Django admin interface allows for the "dynamic" adding of entries of  fields by using the "+" button, which can streamline the data-entry process.
+
+Using Database-defined parameters in NextFlow processes
+-------------------------------------------------------
