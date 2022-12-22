@@ -292,7 +292,7 @@ For example:
    sky_temp             None
    tags                 []
 
-Similarly to ``get_algorithm_settings.py``, this script can be called from the command line (as shown above), or the ``get_algorithm_settings()`` function can be imported and called from other Python scripts.
+Similarly to ``get_algorithm_settings.py``, the ``get_observation_info.py`` script can be called from the command line (as shown above), or the ``get_observation_info()`` function can be imported and called from other Python scripts.
 
 In any case, all the information needed to compute the correct ``--begin`` and ``--end`` times for calling ``grid.py`` for a given observation is now available, with ``--begin`` being the "start_time + skip_nseconds", and ``--end`` being "start_time + skip_nseconds + process_nseconds - 1" (if "process_nseconds" is a number) or simply "stop_time" (if "process_nseconds" has the value "all").
 
