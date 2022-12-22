@@ -184,7 +184,7 @@ Using Database-defined parameters in NextFlow processes
 The tool for retrieving defined algorithm settings from the Database is the ``scripts/smart_database/get_algorithm_settings.py`` script.
 It takes as required inputs a survey chapter name and the name of an algorithm, and will return all algorithm settings that match those two constraints.
 
-The script can be called from the command line, in which case the results of the query are written to stdout, or it can be imported as a python module, in which case the ``get_algorithm_settings()`` function returns a list of dictionaries whose keys are ``algorithm_parameter__name``, ``value``, and ``config_file`` (discussed below [TODO: add link to section]).
+The script can be called from the command line, in which case the results of the query are written to stdout, or it can be imported as a python module, in which case the ``get_algorithm_settings()`` function returns a list of dictionaries whose keys are ``algorithm_parameter__name``, ``value``, and ``config_file`` (discussed below in :ref:`config_files`).
 Calling the script from the command line is necessary when the NextFlow process that depends on those values involves calls to external software.
 However, if the process uses scripts in ``mwa_search`` (such as ``grid.py``), then the scripts themselves may import ``get_algorithm_settings.py`` directly and use the dictionary is later processing.
 Using the latter method is a matter of taste.
@@ -297,4 +297,18 @@ Similarly to ``get_algorithm_settings.py``, the ``get_observation_info.py`` scri
 In any case, all the information needed to compute the correct ``--begin`` and ``--end`` times for calling ``grid.py`` for a given observation is now available, with ``--begin`` being the "start_time + skip_nseconds", and ``--end`` being "start_time + skip_nseconds + process_nseconds - 1" (if "process_nseconds" is a number) or simply "stop_time" (if "process_nseconds" has the value "all").
 
 In this way, we have successfully reduced the number of inputs needed by the NextFlow script responsible for calculating the tied-array beam positions to only two: an observation id and a survey chapter.
+The algorithm, of course, is tied to the NextFlow script itself.
 Everything else is determined from values stored within the database itself.
+
+.. _config_files:
+
+Using configuration files as collections of parameters
+------------------------------------------------------
+
+For some SMART workflows, it may be convenient to store multiple algorithm parameters in a single downloadable file that is stored in the database.
+This is especially true if the software that is run during a process accepts configuration files themselves as inputs, in which case there is little sense breaking apart the contents of the configuration file into parameters to be stored individually in the Database.
+
+A good example of this is the riptide software used for FFA (Fast Folding Algorithm) searches, which the SMART survey is using for its second pass.
+Riptide's input configurations are extensive, and are kept all together in a single YAML file which is passed into riptide as a single parameter.
+
+For cases like this, the ``AlgorithmSetting`` table includes a file field called "config_file" that can be used instead of (or in addition to) the usual "value" field.
