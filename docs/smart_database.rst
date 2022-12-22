@@ -296,9 +296,10 @@ Similarly to ``get_algorithm_settings.py``, the ``get_observation_info.py`` scri
 
 In any case, all the information needed to compute the correct ``--begin`` and ``--end`` times for calling ``grid.py`` for a given observation is now available, with ``--begin`` being the "start_time + skip_nseconds", and ``--end`` being "start_time + skip_nseconds + process_nseconds - 1" (if "process_nseconds" is a number) or simply "stop_time" (if "process_nseconds" has the value "all").
 
-In this way, we have successfully reduced the number of inputs needed by the NextFlow script responsible for calculating the tied-array beam positions to only two: an observation id and a survey chapter.
-The algorithm, of course, is tied to the NextFlow script itself.
-Everything else is determined from values stored within the database itself.
+In this way, we have successfully reduced the number of inputs needed by the NextFlow script responsible for calculating the tied-array beam positions to only two: an **observation id** and a 
+**survey chapter**.
+The **algorithm**, of course, is tied to the NextFlow script itself.
+Everything else is determined from values stored within the database.
 
 .. _config_files:
 
