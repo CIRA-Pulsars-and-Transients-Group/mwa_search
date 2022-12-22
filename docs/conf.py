@@ -40,6 +40,7 @@ extensions = [
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
+    'sphinx.ext.graphviz',
     'numpydoc',
     'myst_parser'
 ]
