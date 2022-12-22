@@ -214,9 +214,9 @@ Handling variable parameter settings
 ------------------------------------
 
 In some cases, the input parameters needed by the NextFlow processes depend not only on certain pre-decided and fixed settings, but also on values that change from processing job to processing job.
-For example, one difference between the first and second passes is amount of observational data that is processed, which in turn changes the number of tied-array beam pointings that are used.
+For example, one difference between the first and second passes is the amount of observational data that is processed, which in turn changes the number of tied-array beam pointings that are used.
 The actual parameters that ``grid.py`` is expecting include ``--begin`` and ``--end`` times, which not only differ from survey chapter to survey chapter, but also from observation to observation.
-The ``AlgorithmSetting`` table is only designed for fixed values, so in this case the best approach is to invent a custom parameter that provides a high-level distinction between the various possibilities, and to implement the logic to interpret those values for specific processes locally.
+The ``AlgorithmSetting`` table is only designed for fixed values, so in this case the best approach is to invent a custom parameter that provides a high-level distinction between the various possibilities, and to implement the logic to interpret those values for specific processes locally (i.e. within the NextFlow scripts).
 
 In this example, we might define a pair of parameters as follows:
 
@@ -270,3 +270,31 @@ These are then tied to survey chapters in the usual way:
 
 The actual values that need to be passed into ``grid.py`` must now be worked out from these definitions inside the NextFlow script that calls ``grid.py``.
 However, the ``--begin`` and ``--end`` values also depend on which observation is being "gridded", and while the observation itself is necessarily provided by the user, the information needed to calculate these values must *also* be retrieved from the database (in this case, the "start_time" and "stop_time" fields of the ``Observation`` table).
+
+This information can be retrieved using the ``scripts/smart_database/get_observation_info.py`` script.
+For example:
+
+.. code-block::
+   :caption: Querying observation info
+
+   $ get_observation_info.py --token=$SMART_TOKEN --base_url=$SMART_BASE_URL 1234567890 --pretty
+   id                   1
+   observation_id       1234567890
+   name                 P01
+   start_time           1234567893
+   stop_time            1234568000
+   azimuth_pointing     None
+   elevation_pointing   None
+   ra_pointing          12.0
+   dec_pointing         34.0
+   centre_frequency_MHz None
+   bandwidth_MHz        None
+   sky_temp             None
+   tags                 []
+
+Similarly to ``get_algorithm_settings.py``, this script can be called from the command line (as shown above), or the ``get_algorithm_settings()`` function can be imported and called from other Python scripts.
+
+In any case, all the information needed to compute the correct ``--begin`` and ``--end`` times for calling ``grid.py`` for a given observation is now available, with ``--begin`` being the "start_time + skip_nseconds", and ``--end`` being "start_time + skip_nseconds + process_nseconds - 1" (if "process_nseconds" is a number) or simply "stop_time" (if "process_nseconds" has the value "all").
+
+In this way, we have successfully reduced the number of inputs needed by the NextFlow script responsible for calculating the tied-array beam positions to only two: an observation id and a survey chapter.
+Everything else is determined from values stored within the database itself.
