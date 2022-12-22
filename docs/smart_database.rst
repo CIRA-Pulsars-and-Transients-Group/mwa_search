@@ -312,3 +312,8 @@ A good example of this is the riptide software used for FFA (Fast Folding Algori
 Riptide's input configurations are extensive, and are kept all together in a single YAML file which is passed into riptide as a single parameter.
 
 For cases like this, the ``AlgorithmSetting`` table includes a file field called "config_file" that can be used instead of (or in addition to) the usual "value" field.
+The path to the uploaded file is given in the ``config_file`` field output by the ``get_algorithm_settings.py`` script.
+Currently, the Database allows all media files to be viewed (and therefore downloaded) directly by mapping the directory containing all the uploaded files to a static URL, specifically, ``media/``.
+Thus, configuration files can be downloaded programmatically by first retrieving the ``path/to/config_file.yaml`` (for example) using the ``get_algorithm_settings.py``, and then downloading (e.g. via ``wget``) from the URL:
+
+**http://.../media/path/to/config_file.yaml**
