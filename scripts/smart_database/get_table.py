@@ -12,7 +12,7 @@ def get_table(table, token=None, base_url=None):
     smart_session = smart.Session(token=token, base_url=base_url)
 
     # Send a GET request to the appropriate view
-    view = f'{table}/'
+    view = f'api/{table}/'
     rows = smart_session.get(view)
 
     return rows
