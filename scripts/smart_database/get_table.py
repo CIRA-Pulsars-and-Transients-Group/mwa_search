@@ -41,11 +41,10 @@ def main():
     if args.format == 'csv':
         for row in rows.json():
             print(args.delimiter.join([str(row[k]) for k in row]))
-            #print([row[k] for k,v in row.items()])
     elif args.format == 'json':
         print(rows.json())
     else:
-        print(f"error: '{args.format}' not supported")
+        raise ValueError(f"'{args.format}' format not supported")
 
 if __name__ == '__main__':
     main()
