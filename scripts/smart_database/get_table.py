@@ -4,6 +4,8 @@ Poll the SMART database for the contents of a specified table
 """
 
 import argparse
+import json
+import requests
 import smart_database_auth as smart
 
 def get_table(table, token=None, base_url=None):
@@ -31,17 +33,22 @@ def main():
 
     args = parser.parse_args()
 
-    rows = get_table(
+    try:
+        rows = get_table(
             args.table,
             token=args.token,
             base_url=args.base_url,
-            )
+        )
+        rows.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        print(err)
+        return
 
     if args.format == 'csv':
         for row in rows.json():
             print(args.delimiter.join([str(row[k]) for k in row]))
     elif args.format == 'json':
-        print(rows.json())
+        print(json.dumps(rows.json(), indent=4))
     else:
         raise ValueError(f"'{args.format}' format not supported")
 

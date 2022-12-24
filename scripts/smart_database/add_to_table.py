@@ -5,6 +5,7 @@ Add rows to a specified table
 
 import argparse
 import json
+import requests
 import smart_database_auth as smart
 
 def add_to_table(table, token=None, base_url=None, **kwargs):
@@ -14,9 +15,9 @@ def add_to_table(table, token=None, base_url=None, **kwargs):
 
     # Send a GET request to the appropriate view
     view = f'api/{table}/'
-    rows = smart_session.post(view, **kwargs)
+    response = smart_session.post(view, **kwargs)
 
-    return rows
+    return response
 
 def main():
     # Parse command line options
@@ -34,12 +35,16 @@ def main():
     # Get the json object from the file
     json_object = json.load(args.json_file)
 
-    rows = add_to_table(
+    try:
+        response = add_to_table(
             args.table,
             token=args.token,
             base_url=args.base_url,
             json=json_object,
-            )
+        )
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as err:
+        print(err)
 
 if __name__ == '__main__':
     main()

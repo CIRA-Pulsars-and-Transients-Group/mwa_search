@@ -44,7 +44,7 @@ class Session():
         the view_url appended to it.
         '''
         url = urljoin(self.base_url, view_url)
-        self.session.post(url, **kwargs)
+        return self.session.post(url, **kwargs)
 
     def get(self, view_url, **kwargs):
         '''
