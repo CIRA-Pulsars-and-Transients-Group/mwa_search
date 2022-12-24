@@ -4,7 +4,6 @@ Poll the SMART database for the contents of a specified table
 """
 
 import argparse
-import requests
 import smart_database_auth as smart
 
 def get_table(table, token=None, base_url=None):
