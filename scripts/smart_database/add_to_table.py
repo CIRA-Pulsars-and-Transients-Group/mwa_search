@@ -35,7 +35,12 @@ def main():
     # Get the json object from the file
     json_object = json.load(args.json_file)
 
-    files = json_object.get('files', None)
+    # Only allow files to be uploaded for single-row additions
+    # (i.e. where the JSON is just a single dict, not a list of dicts)
+    files = None
+    if isinstance(json_object, dict):
+        files = json_object.get('files', None)
+
     if files:
         for k,v in files.items():
             files[k] = open(files[k], 'rb')
