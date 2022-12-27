@@ -35,16 +35,38 @@ def main():
     # Get the json object from the file
     json_object = json.load(args.json_file)
 
-    try:
-        response = add_to_table(
-            args.table,
-            token=args.token,
-            base_url=args.base_url,
-            json=json_object,
-        )
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as err:
-        print(err)
+    files = json_object.get('files', None)
+    if files:
+        for k,v in files.items():
+            files[k] = open(files[k], 'rb')
+        json_object.pop('files')
+
+        try:
+            response = add_to_table(
+                args.table,
+                token=args.token,
+                base_url=args.base_url,
+                data=json_object,
+                files=files,
+            )
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            print(err)
+
+        for k,v in files.items():
+            files[k].close()
+    else:
+        try:
+            response = add_to_table(
+                args.table,
+                token=args.token,
+                base_url=args.base_url,
+                json=json_object,
+            )
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            print(err)
+
 
 if __name__ == '__main__':
     main()
