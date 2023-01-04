@@ -72,6 +72,9 @@ setup(name="mwa_search",
                # plotting
                'scripts/plotting/plot_obs_pulsar.py',
                'scripts/plotting/position_sn_heatmap_fwhm.py',
+               # smart database
+               'scripts/smart_database/get_table.py',
+               'scripts/smart_database/add_to_table.py',
                # nextflow
                'nextflow/beamform.nf', 'nextflow/beamform_module.nf',
                'nextflow/pulsar_search.nf', 'nextflow/pulsar_search_module.nf',
