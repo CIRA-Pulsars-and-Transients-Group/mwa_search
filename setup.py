@@ -75,6 +75,7 @@ setup(name="mwa_search",
                # smart database
                'scripts/smart_database/get_table.py',
                'scripts/smart_database/add_to_table.py',
+               'scripts/smart_database/smart_database_auth.py',
                # nextflow
                'nextflow/beamform.nf', 'nextflow/beamform_module.nf',
                'nextflow/pulsar_search.nf', 'nextflow/pulsar_search_module.nf',
