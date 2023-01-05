@@ -46,6 +46,26 @@ class Session():
         url = urljoin(self.base_url, view_url)
         return self.session.post(url, **kwargs)
 
+    def patch(self, view_url, **kwargs):
+        '''
+        A wrapper for the underlying session.patch() call
+
+        The URL used for the session.patch() call is the base_url with
+        the view_url appended to it.
+        '''
+        url = urljoin(self.base_url, view_url)
+        return self.session.patch(url, **kwargs)
+
+    def put(self, view_url, **kwargs):
+        '''
+        A wrapper for the underlying session.put() call
+
+        The URL used for the session.put() call is the base_url with
+        the view_url appended to it.
+        '''
+        url = urljoin(self.base_url, view_url)
+        return self.session.put(url, **kwargs)
+
     def get(self, view_url, **kwargs):
         '''
         A wrapper for the underlying session.get() call
@@ -55,6 +75,16 @@ class Session():
         '''
         url = urljoin(self.base_url, view_url)
         return self.session.get(url, **kwargs)
+
+    def delete(self, view_url, **kwargs):
+        '''
+        A wrapper for the underlying session.delete() call
+
+        The URL used for the session.delete() call is the base_url with
+        the view_url appended to it.
+        '''
+        url = urljoin(self.base_url, view_url)
+        return self.session.delete(url, **kwargs)
 
     def __del__(self):
         self.session.close()
