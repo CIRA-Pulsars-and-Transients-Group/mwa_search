@@ -18,6 +18,10 @@ class TokenAuth(requests.auth.AuthBase):
 
 
 class Session:
+    """A thin wrapper around a requests.session instance for
+    slightly easier access to the SMART database.
+    """
+
     def __init__(self, token=None, base_url=None):
         """
         Creates a session to the SMART database
