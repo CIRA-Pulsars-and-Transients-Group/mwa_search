@@ -79,9 +79,8 @@ workflow classifier {
     take:
         presto_candiates
     main:
-        presto_candiates
         // Collate into groups of 30 candidates
-        collated_cands = presto_candiates.collate( 30 ).map{ it.transpose() }
+        collated_cands = presto_candiates.transpose().collate( 30 ).map{ it.transpose() }
         feature_extract( collated_cands )
         classify( feature_extract.out )
         sort_detections( classify.out )

@@ -226,13 +226,13 @@ workflow {
         bestprof_data_fits = bestprof_data.concat( beamform.out ).groupTuple()
         // Do a follow up fold if bestprofs given
         follow_up_fold(
-            bestprof_data_fits.map{ pointing, name_fits, dm, period -> [ name_fits[1], dm[0], period[0] ] }.view()
+            bestprof_data_fits.map{ pointing, name_fits, dm, period -> [ name_fits[1], dm[0], period[0] ] }
         )
-        name_fits = bestprof_data_fits.map{ pointing, name_fits, dm, period -> name_fits }.view()
+        name_fits = bestprof_data_fits.map{ pointing, name_fits, dm, period -> name_fits }
     }
     else {
         // Make a name for each fits file
-        name_fits = beamform.out.map{ pointing, fits -> [ "${params.cand}_${params.obsid}_${pointing}", fits ] }
+        name_fits = beamform.out.map{ pointing, fits -> [ "${params.cand}_${params.obsid}_${pointing}".toString(), fits ] }
     }
 
     // Perform pulsar search

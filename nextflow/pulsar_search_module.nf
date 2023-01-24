@@ -19,7 +19,14 @@ max_f_harm = max_freq * params.nharm
 
 def search_time_estimate(dur, ndm) {
     // Estimate the duration of a search job in seconds
-    return params.search_scale * Float.valueOf(dur) * (0.006*Float.valueOf(ndm) + 1)
+    search_time = params.search_scale * Float.valueOf(dur) * (0.006*Float.valueOf(ndm) + 1)
+    // Max time is 24 hours for many clusters so always use less than that
+    if ( search_time < 86400 ) {
+        return "${search_time}s"
+    }
+    else {
+        return "86400s"
+    }
 }
 
 process get_freq_and_dur {
@@ -170,10 +177,7 @@ process search_dd_fft_acc {
     label 'cpu'
     label 'presto_search'
 
-    // Max time is 24 hours for many clusters so always use less than that
-    time { search_time_estimate(dur, params.max_work_function) < 86400 ? \
-        "${search_time_estimate(dur, params.max_work_function)}s" :
-        "86400s"}
+    time { search_time_estimate(dur, params.max_work_function) }
     memory { "${task.attempt * 30} GB"}
     maxRetries 2
     errorStrategy 'retry'
@@ -232,10 +236,10 @@ process accelsift {
     maxRetries 1
 
     input:
-    tuple val(name), path(accel), path(inf), path(single_pulse), path(cands)
+    tuple val(name), path(accel), path(single_pulse), path(cands)
 
     output:
-    tuple val(name), path(accel), path(inf), path(single_pulse), path(cands), path("cands_*greped.txt")
+    tuple val(name), path(accel), path(single_pulse), path(cands), path("cands_*greped.txt")
 
     shell:
     '''
@@ -248,7 +252,8 @@ process accelsift {
 
     ACCEL_sift.py --file_name !{name}
     if [ -f cands_!{name}.txt ]; then
-        grep !{name} cands_!{name}.txt > cands_!{name}_greped.txt
+        # Get candidate lines and replace space with a comma
+        grep !{name} cands_!{name}.txt | tr -s '[:space:]' | sed -e 's/ /,/g' > cands_!{name}_greped.txt
     else
         #No candidates so make an empty file
         touch cands_!{name}_greped.txt
@@ -262,44 +267,53 @@ process prepfold {
     label 'presto'
 
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_prepfold
-    time "${ (int) ( params.prepfold_scale * Float.valueOf(dur) ) }s"
+    time "${ (int) ( params.prepfold_scale * dur ) }s"
     errorStrategy 'retry'
     maxRetries 1
 
     input:
-    tuple val(name), path(fits_files), val(dur), val(cand_line), path(cand_inf), path(cand_file)
+    tuple val(cand_lines), val(dur), path(cand_infs), path(cand_files), path(fits_files)
 
     output:
     tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png")//, optional: true) // some PRESTO installs don't make pngs
 
     //no mask command currently
     """
-    echo "${cand_line.split()}"
-    # Set up the prepfold options to match the ML candidate profiler
-    temp_period=${Float.valueOf(cand_line.split()[7])/1000}
-    period=\$(printf "%.8f" \$temp_period)
-    if (( \$(echo "\$period > 0.01" | bc -l) )); then
-        nbins=100
-        ntimechunk=120
-        dmstep=1
-        period_search_n=1
-    else
-        # bin size is smaller than time resolution so reduce nbins
-        nbins=50
-        ntimechunk=40
-        dmstep=3
-        period_search_n=2
-    fi
+    # Loop over each candidate
+    for cand_line in "${cand_lines.join('" "').replace(", ", ",")}"; do
+        # cut off [ and ]
+        cand_line=\$( echo "\${cand_line}" | cut -d "[" -f 2 | cut -d "]" -f 1 )
+        echo \${cand_line}
+        # Split into each value
+        IFS=, read -r name dm c3 c4 nharm period c7 c8 c9 c10 c11 <<< \${cand_line}
+        fits_name=\${name%_DM*}
+        fits_name=\${fits_name#*_}
 
-    # Work out how many dmfacts to use to search +/- 2 DM
-    ddm=`echo "scale=10;0.000241*138.87^2*\${dmstep} / (1/\$period *\$nbins)" | bc`
-    ndmfact=`echo "1 + 1/(\$ddm*\$nbins)" | bc`
-    echo "ndmfact: \$ndmfact   ddm: \$ddm"
+        # Set up the prepfold options to match the ML candidate profiler
+        period=\$(echo "scale=8; \$period / 1000" | bc | awk '{printf "%.8f", \$0}')
+        if (( \$(echo "\$period > 0.01" | bc -l) )); then
+            nbins=100
+            ntimechunk=120
+            dmstep=1
+            period_search_n=1
+        else
+            # bin size is smaller than time resolution so reduce nbins
+            nbins=50
+            ntimechunk=40
+            dmstep=3
+            period_search_n=2
+        fi
 
-    #-p \$period
-    prepfold -ncpus ${task.cpus} -o ${cand_line.split()[0]} -n \$nbins -dm ${cand_line.split()[1]} -noxwin -noclip -nsub 256 \
--accelfile ${cand_file} -accelcand ${cand_line.split()[0].split(":")[-1]} \
--npart \$ntimechunk -dmstep \$dmstep -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact -runavg *.fits
+        # Work out how many dmfacts to use to search +/- 2 DM
+        ddm=\$(echo "scale=10;0.000241*138.87^2*\${dmstep} / (1/\$period *\$nbins)" | bc)
+        ndmfact=\$(echo "1 + 1/(\$ddm*\$nbins)" | bc)
+        echo "ndmfact: \$ndmfact   ddm: \$ddm"
+
+        prepfold -ncpus ${task.cpus} -o \$name  -accelfile \${name%:*}.cand -accelcand \${name##*:} \
+    -n \$nbins -dm \$dm -noxwin -noclip -nsub 256 -npart \$ntimechunk -dmstep \$dmstep \
+    -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact -runavg \${fits_name}*.fits
+
+    done
     """
 }
 
@@ -308,11 +322,10 @@ process search_dd {
     label 'cpu'
     label 'presto_search'
 
-    time { search_time_estimate(dur, params.max_work_function) < 86400 ? \
-        "${search_time_estimate(dur, params.max_work_function)}s" :
-        "86400s"}
-    memory { "${task.attempt * 3} GB"}
+    time { search_time_estimate(dur, params.max_work_function) }
+    memory { "${task.attempt * 30} GB"}
     maxRetries 2
+    errorStrategy 'retry'
     maxForks params.max_search_jobs
 
     input:
@@ -400,11 +413,11 @@ workflow pulsar_search {
 
         // Get all the inf, ACCEL and single pulse files and sort them into groups with the same name key
         // This uses the groupKey so it should output the channel as soon as it has all the DMs
-        inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel - null, inf, sp, cands - null ] }
+        inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel - null, sp, cands - null ] }
         accelsift( inf_accel_sp_cand )
 
         // For each line of each candidate file and treat it as a candidate
-        accel_cands = accelsift.out.map{ it[-1].splitCsv() }.flatten().map{ it -> [it.split()[0].split("_ACCEL")[0], it ] }
+        accel_cands = accelsift.out.flatMap{ it[-1].splitCsv() }.map{ it -> [it[0].split("_ACCEL")[0], it ] }
         // Grab the inf and cand files for the key (name including DM)
         inf_cands  = search_dd_fft_acc.out.map{ it[2] }.flatten().map{ [ it.baseName, it ] } // inf files
             .concat( search_dd_fft_acc.out.map{ it[4] }.flatten().map{ [ it.baseName.split("_ACCEL")[0], it ] } ) // cand files
@@ -413,15 +426,20 @@ workflow pulsar_search {
         accel_inf_cands = accel_cands.cross( inf_cands )
             // Reorganise it so it's back to the just name key style
             .map{ [ it[0][0].split("_DM")[0], it[0][1], it[1][1], it[1][2] ] }
-        // Pair them with fits files and metadata so they are read to fole+
+        // Pair them with fits files and metadata so they are ready to fold
         cands_for_prepfold = name_fits_freq_dur.cross( accel_inf_cands )
-            .map{ [ it[0][0], it[0][1], it[0][3], it[1][1], it[1][2], it[1][3] ] }
+            .map{ [ it[1][1], Float.valueOf(it[0][3]), it[1][2], it[1][3], it[0][1] ] }
+            // collate by several prepfold jobs together
+            .collate( params.max_folds_per_job )
+            // reformat them to be in lists for each data type
+            .transpose().collate( 5 )
+            .map { cand_lines, durs, cand_infs, cand_files, fits_files -> [ cand_lines, durs.sum(), cand_infs, cand_files, fits_files.unique() ]}
             // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
         prepfold( cands_for_prepfold )
 
         // Combined the grouped single pulse files with the fits files
         single_pulse_searcher(
-            inf_accel_sp_cand.map{ [ it[0], it[3] ] }.concat( name_fits_files ).groupTuple().map{ [ it[0], it[1][0], it[1][1] ] }
+            inf_accel_sp_cand.map{ [ it[0], it[2] ] }.concat( name_fits_files ).groupTuple( size: 2 ).map{ [ it[0], it[1][0], it[1][1] ] }
         )
     emit:
         // [ pfd, bestprof, ps, png ]
@@ -450,7 +468,7 @@ workflow single_pulse_search {
         // Output format: [ name,  presto_inf, single_pulse ]
 
         // Get all the inf and single pulse files and sort them into groups with the same name key
-        inf_accel_sp_cand = search_dd.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel - null, inf, sp, cands - null ] }
+        inf_accel_sp_cand = search_dd.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel - null, sp, cands - null ] }
         // Combined the grouped single pulse files with the fits files
         single_pulse_searcher(
             inf_accel_sp_cand.map{ [ it[0], it[2] ] }.concat( name_fits_files ).groupTuple().map{ [ it[0], it[1][0], it[1][1] ] }
