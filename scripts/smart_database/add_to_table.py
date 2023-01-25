@@ -29,38 +29,14 @@ def main():
     # Add other arguments specific to this script
     parser.add_argument('table', help='The table to be polled.')
     parser.add_argument('json_file', type=argparse.FileType('r'), help='File containing json object(s) to be added to the table')
+    parser.add_argument('--one_by_one', action='store_true', help='If the file contains a list of JSON objects, upload JSON objects one at a time, instead of uploading them as a single multi-component object.')
 
     args = parser.parse_args()
 
     # Get the json object from the file
-    json_object = json.load(args.json_file)
+    json_loaded = json.load(args.json_file)
 
-    # Only allow files to be uploaded for single-row additions
-    # (i.e. where the JSON is just a single dict, not a list of dicts)
-    files = None
-    if isinstance(json_object, dict):
-        files = json_object.get('files', None)
-
-    if files:
-        for k,v in files.items():
-            files[k] = open(files[k], 'rb')
-        json_object.pop('files')
-
-        try:
-            response = add_to_table(
-                args.table,
-                token=args.token,
-                base_url=args.base_url,
-                data=json_object,
-                files=files,
-            )
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as err:
-            print(err)
-
-        for k,v in files.items():
-            files[k].close()
-    else:
+    def upload_single_object(args, json_object):
         try:
             response = add_to_table(
                 args.table,
@@ -71,6 +47,12 @@ def main():
             response.raise_for_status()
         except requests.exceptions.HTTPError as err:
             print(err)
+
+    if isinstance(json_loaded, list) and args.one_by_one:
+        for json_object in json_loaded:
+            upload_single_object(args, json_object)
+    else:
+        upload_single_object(args, json_loaded)
 
 
 if __name__ == '__main__':
