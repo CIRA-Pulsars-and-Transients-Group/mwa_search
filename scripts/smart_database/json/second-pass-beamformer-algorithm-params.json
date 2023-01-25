@@ -1,0 +1,211 @@
+[
+    {
+        "name": "ibf_coarse_chan",
+        "algorithms": [
+            "incoherent_beam"
+        ],
+        "description": "Coarse frequency channel number to start processing for the incoherent beam"
+    },
+    {
+        "name": "ibf_nsec",
+        "algorithms": [
+            "incoherent_beam"
+        ],
+        "description": "Number of seconds to incoherently beamform"
+    },
+    {
+        "name": "ibf_nsec_per_output",
+        "algorithms": [
+            "incoherent_beam"
+        ],
+        "description": "Number of seconds to output per file from the incoherent beamformer"
+    },
+    {
+        "name": "cbf_coarse_chan",
+        "algorithms": [
+            "coherent_beam"
+        ],
+        "description": "Coarse frequency channel number to start processing for the coherent beam"
+    },
+    {
+        "name": "cbf_nsec",
+        "algorithms": [
+            "coherent_beam"
+        ],
+        "description": "Number of seconds to coherently beamform"
+    },
+    {
+        "name": "cbf_nsec_per_output",
+        "algorithms": [
+            "coherent_beam"
+        ],
+        "description": "Number of seconds to output per file from the coherent beamformer"
+    },
+    {
+        "name": "min_dm",
+        "algorithms": [
+            "dedispersion",
+            "FFA",
+            "FDAS",
+            "SPS"
+        ],
+        "description": "The default minimum DM to search from, in pc/cm^3"
+    },
+    {
+        "name": "max_dm",
+        "algorithms": [
+            "dedispersion",
+            "FFA",
+            "FDAS",
+            "SPS"
+        ],
+        "description": "The default maximum DM to search to, in pc/cm^3"
+    },
+    {
+        "name": "fdas_max_dm",
+        "algorithms": [
+            "FDAS"
+        ],
+        "description": "Maximum DM to search to for a FDAS search, in pc/cm^3"
+    },
+    {
+        "name": "fdas_min_dm",
+        "algorithms": [
+            "FDAS"
+        ],
+        "description": "Minimum DM to search from for a FDAS search, in pc/cm^3"
+    },
+    {
+        "name": "ffa_max_dm",
+        "algorithms": [
+            "FFA"
+        ],
+        "description": "Maximum DM to search to for a FFA search, in pc/cm^3"
+    },
+    {
+        "name": "ffa_min_dm",
+        "algorithms": [
+            "FFA"
+        ],
+        "description": "Minimum DM to search from for a FFA search, in pc/cm^3"
+    },
+    {
+        "name": "sps_max_dm",
+        "algorithms": [
+            "SPS"
+        ],
+        "description": "Maximum DM to search to for a single-pulse search, in pc/cm^3"
+    },
+    {
+        "name": "sps_min_dm",
+        "algorithms": [
+            "SPS"
+        ],
+        "description": "Minimum DM to search from a single-pulse search, in pc/cm^3"
+    },
+    {
+        "name": "fdas_min_period",
+        "algorithms": [
+            "FDAS"
+        ],
+        "description": "Minimum period to search for with a FDAS, in seconds"
+    },
+    {
+        "name": "fdas_max_period",
+        "algorithms": [
+            "FDAS"
+        ],
+        "description": "Maximum period to search for with a FDAS, in seconds"
+    },
+    {
+        "name": "fdas_nharms",
+        "algorithms": [
+            "FDAS"
+        ],
+        "description": "Number of harmonics to sum when conducting a FDAS (power of 2)"
+    },
+    {
+        "name": "fdas_zmax",
+        "algorithms": [
+            "FDAS"
+        ],
+        "description": "Maximum Fourier 'acceleration' factor (first time-derivative of Fourier frequency)"
+    },
+    {
+        "name": "fdas_zstep",
+        "algorithms": [
+            "FDAS"
+        ],
+        "description": "Fourier 'acceleration' factor grid step size (interbinning)"
+    },
+    {
+        "name": "fdas_wmax",
+        "algorithms": [
+            "FDAS"
+        ],
+        "description": "Maximum Fourier 'jerk' factor (second time-derivative of Fourier frequency)"
+    },
+    {
+        "name": "fdas_wstep",
+        "algorithms": [
+            "FDAS"
+        ],
+        "description": "Fourier 'jerk' factor grid step size (interbinning)"
+    },
+    {
+        "name": "fdas_detection_threshold",
+        "algorithms": [
+            "FDAS"
+        ],
+        "description": "Detection threshold for Fourier candidates"
+    },
+    {
+        "name": "ffa_min_period",
+        "algorithms": [
+            "FFA"
+        ],
+        "description": "Minimum period to search for with a FFA search, in seconds"
+    },
+    {
+        "name": "ffa_max_period",
+        "algorithms": [
+            "FFA"
+        ],
+        "description": "Maximum period to search for with a FFA search, in seconds"
+    },
+    {
+        "name": "ffa_detection_threshold",
+        "algorithms": [
+            "FFA"
+        ],
+        "description": "Detection threshold for FFA candidates"
+    },
+    {
+        "name": "riptide_ffa_config",
+        "algorithms": [
+            "FFA"
+        ],
+        "description": "A configuration file for the 'riptide' FFA search engine"
+    },
+    {
+        "name": "sps_detrend_length",
+        "algorithms": [
+            "SPS"
+        ],
+        "description": "Timeseries detrending length to use for single-pulse search, in samples"
+    },
+    {
+        "name": "sps_max_boxcar_width",
+        "algorithms": [
+            "SPS"
+        ],
+        "description": "Maximum boxcar width to use for single pulse search, in seconds"
+    },
+    {
+        "name": "sps_detection_threshold",
+        "algorithms": [
+            "SPS"
+        ],
+        "description": "Detection threshold for SPS candidates"
+    }
+]

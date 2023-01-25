@@ -1,0 +1,41 @@
+[
+    {
+        "name": "download"
+    },
+    {
+        "name": "recombine"
+    },
+    {
+        "name": "beamform"
+    },
+    {
+        "name": "rfi_mitigation"
+    },
+    {
+        "name": "dedispersion"
+    },
+    {
+        "name": "search_fdas"
+    },
+    {
+        "name": "search_ffa"
+    },
+    {
+        "name": "search_sps"
+    },
+    {
+        "name": "search_fdas_candidate_sift"
+    },
+    {
+        "name": "search_ffa_candidate_sift"
+    },
+    {
+        "name": "search_sps_candidate_sift"
+    },
+    {
+        "name": "ml_classsification"
+    },
+    {
+        "name": "candidate_rating"
+    }
+]

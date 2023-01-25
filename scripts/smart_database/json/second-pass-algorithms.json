@@ -1,0 +1,46 @@
+[
+    {
+        "name": "di-calibration",
+        "description": "Direction-independent calibration"
+    },
+    {
+        "name": "coherent_beam",
+        "description": "Form a coherent (tied-array) beam from MWA voltage data"
+    },
+    {
+        "name": "incoherent_beam",
+        "description": "Form an incoherent beam from MWA voltage data"
+    },
+    {
+        "name": "rfi_mitigation_impulsive",
+        "description": "Mitigation algorithm to identify impulsive RFI signals"
+    },
+    {
+        "name": "rfi_mitigation_periodic",
+        "description": "Mitigation algorithm to identify periodic RFI signals ('birdies')"
+    },
+    {
+        "name": "dedispersion",
+        "description": "Dedispersion algorithm to create dedispersed timeseries for searching"
+    },
+    {
+        "name": "folding",
+        "description": "Fold a dataset with a given ephemeris/pulsar characteristics"
+    },
+    {
+        "name": "FDAS",
+        "description": "Fourier Domain Acceleration Search (i.e., a FFT search)"
+    },
+    {
+        "name": "FFA",
+        "description": "Fast Folding Algorithm search"
+    },
+    {
+        "name": "SPS",
+        "description": "Single Pulse Search"
+    },
+    {
+        "name": "candidate_clustering",
+        "description": "Candidate clustering (within/between search types, observations, etc.)"
+    }
+]

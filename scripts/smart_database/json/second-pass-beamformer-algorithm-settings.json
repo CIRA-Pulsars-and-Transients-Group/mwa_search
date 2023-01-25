@@ -1,0 +1,152 @@
+[
+    {
+        "algorithm parameter": "ibf_coarse_chan",
+        "value": 109,
+        "description": "Coarse frequency channel number to start processing for the incoherent beam"
+    },
+    {
+        "algorithm parameter": "ibf_nsec",
+        "value": 4800,
+        "description": "Default number of seconds to incoherently beamform"
+    },
+    {
+        "algorithm parameter": "ibf_nsec_per_output",
+        "value": 200,
+        "description": "Number of seconds to output per file from the incoherent beamformer"
+    },
+    {
+        "algorithm parameter": "cbf_coarse_chan",
+        "value": 109,
+        "description": "Coarse frequency channel number to start processing for the coherent beam"
+    },
+    {
+        "algorithm parameter": "cbf_nsec",
+        "value": 4800,
+        "description": "Default number of seconds to coherently beamform"
+    },
+    {
+        "algorithm parameter": "cbf_nsec_per_output",
+        "value": 200,
+        "description": "Number of seconds to output per file from the coherent beamformer"
+    },
+    {
+        "algorithm parameter": "cbf_nsec",
+        "value": 4800,
+        "description": "Default number of seconds to coherently beamform"
+    },
+    {
+        "algorithm parameter": "min_dm",
+        "value": 1.0,
+        "description": "Minimum DM to use when creating a dedipsersed timeseries"
+    },
+    {
+        "algorithm parameter": "max_dm",
+        "value": 1000.0,
+        "description": "Maximum DM to use when creating a dedipsersed timeseries"
+    },
+    {
+        "algorithm parameter": "fdas_max_dm",
+        "value": 501.0,
+        "description": "Maximum DM timeseries to search with FDAS"
+    },
+    {
+        "algorithm parameter": "fdas_min_dm",
+        "value": 1.0,
+        "description": "Minimum DM timeseries to search with FDAS"
+    },
+    {
+        "algorithm parameter": "ffa_max_dm",
+        "value": 501.0,
+        "description": "Maximum DM timeseries to search with FFA"
+    },
+    {
+        "algorithm parameter": "ffa_min_dm",
+        "value": 1.0,
+        "description": "Minimum DM timeseries to search with FFA"
+    },
+    {
+        "algorithm parameter": "sps_max_dm",
+        "value": 1000.0,
+        "description": "Maximum DM timeseries to search with SPS"
+    },
+    {
+        "algorithm parameter": "sps_min_dm",
+        "value": 1.0,
+        "description": "Minimum DM timeseries to search with SPS"
+    },
+    {
+        "algorithm parameter": "fdas_min_period",
+        "value": 0.004,
+        "description": "Minimum period to search for in FDAS"
+    },
+    {
+        "algorithm parameter": "fdas_max_period",
+        "value": 10.0,
+        "description": "Maximum period to search for in FDAS"
+    },
+    {
+        "algorithm parameter": "fdas_nharms",
+        "value": 32,
+        "description": "Number of harmonics to sum in FDAS"
+    },
+    {
+        "algorithm parameter": "fdas_zmax",
+        "value": 10,
+        "description": "Maximum z-factor for the acceleration search (+/- this value is searched)"
+    },
+    {
+        "algorithm parameter": "fdas_zstep",
+        "value": 0.1,
+        "description": "Grid step-size for the acceleration search (using Fourier interbinning)"
+    },
+    {
+        "algorithm parameter": "fdas_wmax",
+        "value": 0,
+        "description": "Maximum w-factor for the jerk search (+/- this value is searched)"
+    },
+    {
+        "algorithm parameter": "fdas_wstep",
+        "value": 0,
+        "description": "Grid step-size for the jerk search (using Fourier interbinning)"
+    },
+    {
+        "algorithm parameter": "fdas_detection_threshold",
+        "value": 20,
+        "description": "Detection threshold for Fourier candidates"
+    },
+    {
+        "algorithm parameter": "ffa_min_period",
+        "value": 0.100,
+        "description": "Minimum period to search for with FFA"
+    },
+    {
+        "algorithm parameter": "ffa_max_period",
+        "value": 120.0,
+        "description": "Maxmimum period to search for with FFA"
+    },
+    {
+        "algorithm parameter": "ffa_detection_threshold",
+        "value": 8,
+        "description": "Detection threshold for FFA candidates"
+    },
+    {
+        "algorithm parameter": "riptide_ffa_config",
+        "value": "TODO: ADD FILE",
+        "description": "Configuration file for 'riptide'"
+    },
+    {
+        "algorithm parameter": "sps_detrend_length",
+        "value": 1000,
+        "description": "Detrending length for single pulse search pre-processing"
+    },
+    {
+        "algorithm parameter": "sps_max_boxcar_width",
+        "value": 120.0,
+        "description": "Maxmimum period to search for with FFA"
+    },
+    {
+        "algorithm parameter": "sps_detection_threshold",
+        "value": 8,
+        "description": "Detection threshold for SPS candidates"
+    }
+]
