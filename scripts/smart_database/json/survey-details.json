@@ -1,0 +1,7 @@
+{
+    "name": "SMART",
+    "name_long": "The Southern-Sky MWA Rapid Two-Metre pulsar survey",
+    "telescope": "MWA",
+    "description": "The Southern-Sky MWA Rapid Two-Metre (SMART) pulsar survey is an ongoing project to discover new pulsars (neutron stars) in the southern sky (δ < 30°) using the MWA. This is the only pulsar survey capable of looking for pulsars in the Southern Hemisphere at low frequencies (140-170 MHz), and once complete, it is expected to discover hundreds of new pulsars. Apart from its inherent scientific value, it also serves as a valuable reference for future pulsar searches planned with the low-frequency Square Kilometre Array.",
+    "home_page": "https://www.mwatelescope.org/science/pulsars-and-fast-transients/smart/"
+}
