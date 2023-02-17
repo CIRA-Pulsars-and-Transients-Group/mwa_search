@@ -180,14 +180,12 @@ process prepfold {
     }
 
     //no mask command currently
+    script:
+    eph_command    = (params.pulsar=="" ? "-p ${params.period} -dm ${params.dm}" : "-par ${pulsar}.eph")
+    psrcat_command = (params.pulsar=="" ? "" : "psrcat -e ${pulsar} | grep -v UNITS > ${pulsar}.eph")
     """
-    if [ ${params.pulsar} == 0 ]; then
-        eph_command="-p ${params.period} -dm ${params.dm}"
-    else
-        eph_command="-par ${pulsar}.eph"
-        psrcat -e ${pulsar} | grep -v UNITS > ${pulsar}.eph
-    fi
-    prepfold -ncpus ${task.cpus} -o ${params.obsid}_${pointing}_pos -n ${params.bins} \${eph_command} -noxwin -noclip -nsub 256 -npart 120 \
+    ${psrcat_command}
+    prepfold -ncpus ${task.cpus} -o ${params.obsid}_${pointing}_pos -n ${params.bins} ${eph_command} -noxwin -noclip -nsub 256 -npart 120 \
 -dmstep 1 -pstep 1 -pdstep 2 -npfact 1 -ndmfact 1 -runavg ${params.obsid}*.fits
     """
 }
@@ -209,7 +207,7 @@ process pdmp {
     path "*ar"
 
     if ( "$HOSTNAME".startsWith("farnarkle") ) {
-        beforeScript "module use ${params.presto_module_dir}; module load dspsr/master"
+        beforeScript "module use ${params.presto_module_dir}; module load dspsr/45c9d433"
     }
     else if ( "$HOSTNAME".startsWith("x86") || "$HOSTNAME".startsWith("garrawarla") || "$HOSTNAME".startsWith("galaxy") ) {
         container = "file:///${params.containerDir}/dspsr/dspsr.sif"
@@ -262,7 +260,7 @@ process bestgridpos {
 
 process format_output {
     publishDir params.final_dir, mode: 'copy'
-    echo true
+    debug true
 
     input:
     tuple path(orig_best_file), path(posn_or_bestprof)
@@ -322,7 +320,7 @@ process publish_best_pointing {
     path fits
 
     output:
-    path '*' includeInputs true
+    path '*', includeInputs: true
 
     """
     echo outputing ${fits}
@@ -332,28 +330,28 @@ process publish_best_pointing {
 workflow find_pos {
     take:
         pointings
-        pre_beamform_1
-        pre_beamform_2
-        pre_beamform_3
+        utc_beg_end_dur
+        channels
         fwhm
         orig_pointing
         pulsar_pointings
     main:
-        beamform( pre_beamform_1,
-                  pre_beamform_2,
-                  pre_beamform_3,
-                  pointings )
+        beamform(
+            utc_beg_end_dur,
+            channels,
+            pointings
+        )
         prepfold( // combine pulsar names with fits files
-                  pulsar_pointings.map{ it -> [ it[1], it[0] ] }.concat(beamform.out[3]).\
+                  pulsar_pointings.map{ it -> [ it[1], it[0] ] }.concat(beamform.out).\
                   // group by pointing
                   groupTuple().map{ it -> [ it[0], it[1][1], it[1][0] ] } )
         pdmp( // combine bestprof and fits files
-              prepfold.out[0].map{ it -> [it.baseName.split("_pos")[0].split("${params.obsid}_")[1], it ] }.concat(beamform.out[3])
+              prepfold.out[0].map{ it -> [it.baseName.split("_pos")[0].split("${params.obsid}_")[1], it ] }.concat(beamform.out)
               // group by pointing
               groupTuple().map{ it -> [ it[0], it[1][0], it[1][1] ] } )
 
         if ( params.no_pdmp ) {
-            if ( params.pulsar == 0 ) {
+            if ( params.pulsar == "" ) {
                 bestprof_or_pdmp = prepfold.out[0].flatten().map{ it -> [ "cand", it ] }.groupTuple()
             }
             else {
@@ -361,7 +359,7 @@ workflow find_pos {
             }
         }
         else {
-            if ( params.pulsar == 0 ) {
+            if ( params.pulsar == "" ) {
                 bestprof_or_pdmp = pdmp.out[1].flatten().map{ it -> [ "cand", it ] }.groupTuple()
             }
             else {
@@ -373,7 +371,7 @@ workflow find_pos {
     emit:
         bestgridpos.out[0] // label and new pointing
         bestgridpos.out[2] // orig and best pointing SN file
-        beamform.out[1] // fits files of first grid
+        beamform.out // fits files of first grid
         prepfold.out[0].concat(prepfold.out[1]).flatten().map{ it -> [ it.baseName.split("_pos")[0], it ]} // presto outputs
         pdmp.out[0].concat(pdmp.out[1], pdmp.out[2]).flatten().map{ it -> [ it.baseName.split("_pos")[0], it ]} // dspsr outputs
 
@@ -381,7 +379,7 @@ workflow find_pos {
 
 workflow {
     pre_beamform()
-    fwhm_calc( pre_beamform.out[1].map{ it -> it[0] }.collect() )
+    fwhm_calc( pre_beamform.out.channels.map{ it -> it[0] }.collect() )
 
     // work out intial pointings
     if ( params.pointing_grid ) {
@@ -397,29 +395,35 @@ workflow {
         orig_pointing = get_pulsar_ra_dec.out.splitCsv().map{ it -> it[1] }.collect()
     }
 
-    find_pos( pointings,
-              pre_beamform.out[0],
-              pre_beamform.out[1],
-              pre_beamform.out[2],
-              fwhm_calc.out.splitCsv().flatten(),
-              orig_pointing,
-              grid.out.splitCsv() )
-    beamform( pre_beamform.out[0],
-              pre_beamform.out[1],
-              pre_beamform.out[2],
-              find_pos.out[0].splitCsv().map{ it -> it[1] }.toSortedList().flatten().collate( params.max_pointings ) )
-    prepfold( // combine pulsar names with fits files
-              find_pos.out[0].splitCsv().map{ it -> [ it[1].replaceAll(~/\s/,""), it[0] ] }.concat(beamform.out[3]).\
-              // group by pointing
-              groupTuple().map{ it -> [ it[0], it[1][1], it[1][0] ] } )
-    pdmp( // combine bestprof and fits files
-          prepfold.out[0].map{ it -> [it.baseName.split("_pos")[0].split("${params.obsid}_")[1], it ] }.concat(beamform.out[3])
-          // group by pointing
-          groupTuple().map{ it -> [ it[0], it[1][0], it[1][1] ] } )
+    find_pos(
+        pointings,
+        pre_beamform.out.utc_beg_end_dur,
+        pre_beamform.out.channels,
+        fwhm_calc.out.splitCsv().flatten(),
+        orig_pointing,
+        grid.out.splitCsv()
+    )
+    beamform(
+        pre_beamform.out.utc_beg_end_dur,
+        pre_beamform.out.channels,
+        find_pos.out[0].splitCsv(strip: true).map{ it -> it[1] }.toSortedList().flatten().collate( params.max_pointings )
+    )
+    prepfold(
+        // combine pulsar names with fits files
+        find_pos.out[0].splitCsv(strip: true).map{ it -> [ it[1].replaceAll(~/\s/,""), it[0] ] }.concat(beamform.out).\
+        // group by pointing
+        groupTuple().map{ it -> [ it[0], it[1][1], it[1][0] ] }
+    )
+    pdmp(
+        // combine bestprof and fits files
+        prepfold.out[0].map{ it -> [it.baseName.split("_pos")[0].split("${params.obsid}_")[1], it ] }.concat(beamform.out)
+        // group by pointing
+        groupTuple().map{ it -> [ it[0], it[1][0], it[1][1] ] }
+    )
 
     // Work out the best pointing
     if ( params.no_pdmp ) {
-        if ( params.pulsar == 0 ) {
+        if ( params.pulsar == "" ) {
             bestprof_or_pdmp = prepfold.out[0].flatten().map{ it -> [ "cand", it ] }.groupTuple()
         }
         else {
@@ -427,7 +431,7 @@ workflow {
         }
     }
     else {
-        if ( params.pulsar == 0 ) {
+        if ( params.pulsar == "" ) {
             bestprof_or_pdmp = pdmp.out[1].flatten().map{ it -> [ "cand", it ] }.groupTuple()
         }
         else {
@@ -438,14 +442,18 @@ workflow {
                    groupTuple().map{ it -> it[1] } )
 
     // Find the best pointing fits file
-    publish_best_pointing( // The pointing we want
-                           format_output.out.splitCsv( skip: 1 ).map{ it -> [ ("${params.obsid}_" + it[0]).toString(), it[0] ]}.\
-                           // All fits files
-                           concat(beamform.out[1].concat(find_pos.out[2]).flatten().map{ it -> [ it.baseName.split("_ch")[0], it ] },
-                           // Add the presto outputs
-                                   find_pos.out[3], prepfold.out[0].concat(prepfold.out[1]).flatten().map{ it -> [ it.baseName.split("_pos")[0], it ]},
-                           // Add the dspsr outputs
-                                   find_pos.out[4], pdmp.out[0].concat(pdmp.out[1], pdmp.out[2]).flatten().map{ it -> [ it.baseName.split("_pos")[0], it ]}).\
-                           // Filter the pointing
-                           groupTuple( size: tuple_size ).map{ it -> it[1].tail() } )
+    publish_best_pointing(
+        // The pointing we want
+        format_output.out.splitCsv( skip: 1 ).map{ it -> [ ("${params.obsid}_" + it[0]).toString(), it[0] ]}
+        .concat(
+            // All fits files
+            beamform.out.concat(find_pos.out[2]).map{ it -> [ ("${params.obsid}_" + it[0]).toString(), it[1] ]},
+            // Add the presto outputs
+            find_pos.out[3], prepfold.out[0].concat(prepfold.out[1]).flatten().map{ it -> [ it.baseName.split("_pos")[0], it ]},
+            // Add the dspsr outputs
+            find_pos.out[4], pdmp.out[0].concat(pdmp.out[1], pdmp.out[2]).flatten().map{ it -> [ it.baseName.split("_pos")[0], it ]}
+        )
+        // Filter the pointing
+        .groupTuple( size: tuple_size ).map{ it -> it[1].tail() }
+    )
 }
