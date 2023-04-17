@@ -85,12 +85,20 @@ if __name__ == "__main__":
     add_group = parser.add_argument_group('Extra Plot Layers Options')
     add_group.add_argument('--pulsar', type=str, nargs='+',
                            help='A list of pulsar to mark on the plot.')
+    add_group.add_argument('--pulsar_other', type=str, nargs='+',
+                           help='A list of pulsar to mark on the plot in a different colour.')
+    add_group.add_argument('--pulsar_other_other', type=str, nargs='+',
+                           help='A list of pulsar to mark on the plot in a different colour.')
     add_group.add_argument('--pulsar_detected', action='store_true',
                            help='Plots all pulsars detected by the MWA and uploaded to the pulsar database.')
     add_group.add_argument('--pulsar_all', action='store_true',
                            help='Plots all known pulsars.')
     add_group.add_argument('--pulsar_discovered', action='store_true',
                            help='Plots all pulsars discovered with the MWA.')
+    add_group.add_argument('--pulsar_rediscovered', action='store_true',
+                           help='Plots all pulsars rediscovered with the MWA.')
+    add_group.add_argument('--pulsar_unpublished', action='store_true',
+                           help='Plots all pulsars unpublished discoveries with the MWA.')
     add_group.add_argument('--fill', action='store_true',
                            help='Shades the area the MWA can view.')
     add_group.add_argument('--shade', type=str, nargs='+',
@@ -587,21 +595,82 @@ if __name__ == "__main__":
             ra_map, dec_map = deg_to_plotmap(ra_temp, dec_temp, ra_offset=args.ra_offset, square=args.square)
             ra_PCAT.append(ra_map)
             dec_PCAT.append(dec_map)
-        ax.scatter(ra_PCAT, dec_PCAT, s=5, color ='purple', zorder=100)
+        ax.scatter(ra_PCAT, dec_PCAT, s=5, color ='red', zorder=100)
 
-    if args.pulsar_discovered:
+    if args.pulsar_other:
         #add some pulsars
         ra_PCAT = []
         dec_PCAT = []
-        pulsar_list = [["J0036-1033", "00:36:14.58", "-10:33:16.40"],
-                       ["J0026-1955", "00:26:36.49", "-19:55:54.87"],
-                       ["J1002-2044", "10:02:39.26", "-20:44:41.42"]]
+        print("{} input pulsars".format(len(args.pulsar_other)))
+        raw_pulsar_list = list(dict.fromkeys(args.pulsar_other))
+        print("{} distinct pulsars".format(len(raw_pulsar_list)))
+        pulsar_list = get_psrcat_ra_dec(pulsar_list=raw_pulsar_list)
         for pulsar in pulsar_list:
             ra_temp, dec_temp = sex2deg(pulsar[1], pulsar[2])
             ra_map, dec_map = deg_to_plotmap(ra_temp, dec_temp, ra_offset=args.ra_offset, square=args.square)
             ra_PCAT.append(ra_map)
             dec_PCAT.append(dec_map)
-        ax.scatter(ra_PCAT, dec_PCAT, s=10, color ='r', zorder=120)
+        ax.scatter(ra_PCAT, dec_PCAT, s=5, color ='darkblue', zorder=100)
+
+    if args.pulsar_other_other:
+        #add some pulsars
+        ra_PCAT = []
+        dec_PCAT = []
+        print("{} input pulsars".format(len(args.pulsar_other_other)))
+        raw_pulsar_list = list(dict.fromkeys(args.pulsar_other_other))
+        print("{} distinct pulsars".format(len(raw_pulsar_list)))
+        pulsar_list = get_psrcat_ra_dec(pulsar_list=raw_pulsar_list)
+        for pulsar in pulsar_list:
+            ra_temp, dec_temp = sex2deg(pulsar[1], pulsar[2])
+            ra_map, dec_map = deg_to_plotmap(ra_temp, dec_temp, ra_offset=args.ra_offset, square=args.square)
+            ra_PCAT.append(ra_map)
+            dec_PCAT.append(dec_map)
+        ax.scatter(ra_PCAT, dec_PCAT, s=5, color ='cornflowerblue', zorder=100)
+
+    if args.pulsar_discovered:
+        #add some pulsars
+        ra_PCAT = []
+        dec_PCAT = []
+        pulsar_list = [
+            ["J0036-1033", "00:36:14.58", "-10:33:16.40"],
+            ["J0026-1955", "00:26:36.49", "-19:55:54.87"], # technically a rediscovery
+            ["J1002-2044", "10:02:39.26", "-20:44:41.42"],
+            #["J0451-3421", "04:51",       "-34:21"],
+        ]
+        for pulsar in pulsar_list:
+            ra_temp, dec_temp = sex2deg(pulsar[1], pulsar[2])
+            ra_map, dec_map = deg_to_plotmap(ra_temp, dec_temp, ra_offset=args.ra_offset, square=args.square)
+            ra_PCAT.append(ra_map)
+            dec_PCAT.append(dec_map)
+        ax.scatter(ra_PCAT, dec_PCAT, s=50, color='black', marker="*", zorder=120)
+
+    if args.pulsar_rediscovered:
+        #add some pulsars
+        ra_PCAT = []
+        dec_PCAT = []
+        pulsar_list = [
+            ["J1357-2530", "13:57:24.40", "-25:30:39.00"],
+        ]
+        for pulsar in pulsar_list:
+            ra_temp, dec_temp = sex2deg(pulsar[1], pulsar[2])
+            ra_map, dec_map = deg_to_plotmap(ra_temp, dec_temp, ra_offset=args.ra_offset, square=args.square)
+            ra_PCAT.append(ra_map)
+            dec_PCAT.append(dec_map)
+        ax.scatter(ra_PCAT, dec_PCAT, s=50, color='grey', marker="*", zorder=120)
+
+    if args.pulsar_unpublished:
+        #add some pulsars
+        ra_PCAT = []
+        dec_PCAT = []
+        pulsar_list = [
+            ["J0452-3418", "04:52:10.2", "-34:18:52.9"],
+        ]
+        for pulsar in pulsar_list:
+            ra_temp, dec_temp = sex2deg(pulsar[1], pulsar[2])
+            ra_map, dec_map = deg_to_plotmap(ra_temp, dec_temp, ra_offset=args.ra_offset, square=args.square)
+            ra_PCAT.append(ra_map)
+            dec_PCAT.append(dec_map)
+        ax.scatter(ra_PCAT, dec_PCAT, s=50, color='black', facecolors="None", marker="*", zorder=120)
 
     plt.xlabel("Right Ascension")
     plt.ylabel("Declination")
