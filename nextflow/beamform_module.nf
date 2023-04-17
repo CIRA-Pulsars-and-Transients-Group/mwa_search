@@ -227,7 +227,7 @@ workflow beamform {
             chan_point
         )
         // Make sure the pointings and fits are in the same order then transpose to "flatten" out multiple pointings then group by the pointing for splicing
-        splice( make_beam.out.map{ chan, pointings, fits -> [ chan, pointings.sort(), fits.sort() ] }.transpose().groupTuple( by: 1, size: 24 ) )
+        splice( make_beam.out.map{ chan, pointings, fits -> [ chan, pointings.sort(), [fits].flatten().findAll{ it != null }.sort() ] }.transpose().groupTuple( by: 1, size: 24 ) )
     emit:
         splice.out // [ pointing, fits_file ]
 }
