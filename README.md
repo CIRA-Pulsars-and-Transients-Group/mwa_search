@@ -22,7 +22,7 @@ pip install .
 ```
 or
 ```
-python setup.py install.
+python setup.py install
 ```
 
 On Swinburne's Ozstar supercomputer, the pipeline is already installed so you can load the module using

@@ -8,6 +8,7 @@ Welcome to mwa_search's documentation!
    :caption: Contents:
    :glob:
 
+   installation
    smart_processing
    candidate_follow_up
 
