@@ -11,10 +11,10 @@ Welcome to mwa_search's documentation!
    installation
    smart_processing
    candidate_follow_up
+   observation_plotting
 
    nextflow_scripts
 
-   dpp_scripts
    mwa_search_scripts
    plotting_scripts
 
