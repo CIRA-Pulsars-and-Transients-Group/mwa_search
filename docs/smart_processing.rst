@@ -8,7 +8,7 @@ The following guide will teach you how to process SMART data for the shallow fir
 Overview
 --------
 
-.. image:: first_pass_workflow.png
+.. image:: figures/first_pass_workflow.png
 
 Choosing an observation
 -----------------------

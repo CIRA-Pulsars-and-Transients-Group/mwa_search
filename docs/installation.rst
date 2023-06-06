@@ -6,7 +6,7 @@ The following will explain how to install mwa_search.
 Simple
 ------
 
-To run the pipelines contained in the `nextflow` directory requires [Nextflow](https://www.nextflow.io/).
+To run the pipelines contained in the ``nextflow`` directory requires `Nextflow <https://www.nextflow.io/>`_.
 
 The repository's scripts can be installed using ::
 
