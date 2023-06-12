@@ -113,7 +113,7 @@ process make_beam {
     file "*fits"
 
     """
-    make_beam -o $obsid -b $begin -e $end -a 128 -n 128 \
+    srun make_beam -o $obsid -b $begin -e $end -a 128 -n 128 \
 -f ${channel_pair[0]} -J ${params.version_compare_base_dir}/${obsid}/cal/${calid}/rts/DI_JonesMatrices_node${channel_pair[1]}.dat \
 -d ${params.version_compare_base_dir}/${obsid}/combined -P ${point.join(",")} \
 -r 10000 -m ${params.version_compare_base_dir}/${obsid}/${obsid}_metafits_ppds.fits \
@@ -178,7 +178,7 @@ process make_beam_ipfb {
     file "*hdr"
 
     """
-    make_beam -o $obsid -b $begin -e $end -a 128 -n 128 \
+    srun make_beam -o $obsid -b $begin -e $end -a 128 -n 128 \
 -f ${channel_pair[0]} -J ${params.version_compare_base_dir}/${obsid}/cal/${calid}/rts/DI_JonesMatrices_node${channel_pair[1]}.dat \
 -d ${params.version_compare_base_dir}/${obsid}/combined -P ${point} \
 -r 10000 -m ${params.version_compare_base_dir}/${obsid}/${obsid}_metafits_ppds.fits \

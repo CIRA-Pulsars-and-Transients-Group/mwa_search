@@ -116,7 +116,7 @@ process make_beam {
         jones_option="-J ${params.didir}/DI_JonesMatrices_node${gpubox}.dat"
     fi
 
-    make_beam -o ${params.obsid} -b ${begin} -e ${end} -a 128 -n 128 \
+    srun make_beam -o ${params.obsid} -b ${begin} -e ${end} -a 128 -n 128 \
 -f ${channel_id} \${jones_option} \
 -d ${params.vcsdir}/${params.obsid}/combined -P ${points.join(",").replaceAll(~/\s/,"")} \
 -r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
@@ -160,7 +160,7 @@ process make_beam_ipfb {
         mkdir -p -m 771 ${params.vcsdir}/${params.obsid}/pointings/${point}
     fi
 
-    make_beam -o ${params.obsid} -b ${begin} -e ${end} -a 128 -n 128 \
+    srun make_beam -o ${params.obsid} -b ${begin} -e ${end} -a 128 -n 128 \
 -f ${channel_id} \${jones_option} \
 -d ${params.vcsdir}/${params.obsid}/combined -P ${point} \
 -r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
