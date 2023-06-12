@@ -664,10 +664,7 @@ if __name__ == "__main__":
         dec_PCAT = []
         pulsar_list = [
             ["J0452-3418", "04:52:10.2", "-34:18:52.9"],
-<<<<<<< HEAD
-=======
             ["J0031-5726", "00:31:32.43", "-57:26:35.30"], # Low DM RRAT discovered in Gleam X
->>>>>>> development
         ]
         for pulsar in pulsar_list:
             ra_temp, dec_temp = sex2deg(pulsar[1], pulsar[2])
