@@ -130,7 +130,7 @@ process make_beam {
     path "make_beam*txt"
 
     """
-    make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
+    srun make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
 -f ${channel_pair[0]} -J ${params.didir}/DI_JonesMatrices_node${channel_pair[1]}.dat \
 -d ${params.vcsdir}/${params.obsid}/combined -P ${point.join(",")} \
 -r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
@@ -180,7 +180,7 @@ process make_beam_ipfb {
     path "make_beam*txt"
 
     """
-    make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
+    srun make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
 -f ${channel_pair[0]} -J ${params.didir}/DI_JonesMatrices_node${channel_pair[1]}.dat \
 -d ${params.vcsdir}/${params.obsid}/combined -P ${point} \
 -r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
@@ -226,7 +226,7 @@ process make_beam_single {
     path "make_beam*txt"
 
     """
-    make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
+    srun make_beam -o $params.obsid -b $begin -e $end -a 128 -n 128 \
 -f ${channel_pair[0]} -J ${params.didir}/DI_JonesMatrices_node${channel_pair[1]}.dat \
 -d ${params.vcsdir}/${params.obsid}/combined -R ${point.split("_")[0]} -D ${point.split("_")[1]} \
 -r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
