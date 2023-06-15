@@ -159,7 +159,7 @@ process make_beam_ipfb {
     if ${params.publish_fits}; then
         mkdir -p -m 771 ${params.vcsdir}/${params.obsid}/pointings/${point}
     fi
-
+    
     srun make_beam -o ${params.obsid} -b ${begin} -e ${end} -a 128 -n 128 \
 -f ${channel_id} \${jones_option} \
 -d ${params.vcsdir}/${params.obsid}/combined -P ${point} \
