@@ -35,7 +35,7 @@ def get_git_version():
 # Since we mostly run this on supercomputers it probably isn't correct to
 # pip install all these modules
 reqs = ['argparse>=1.4.0',
-        'numpy>=1.13.3',
+        'numpy>=1.15,<1.20',
         'matplotlib>=2.1.0',
         'astropy>=2.0.2',
         'mwa-vcstools',
@@ -49,7 +49,7 @@ with open('version.py', 'a') as the_file:
 
 setup(
     name="mwa_search",
-    version=mwa_search_version,
+    version=3.4,
     description="Scripts used to search for pulsars with the Murchison Widefield Array's Voltage Capture System data",
     url="https://github.com/NickSwainston/mwa_search",
     #long_description=read('README.md'),
