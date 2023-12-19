@@ -6,9 +6,11 @@ if ( params.summed ) {
 }
 if ( params.ipfb ) {
     bf_out = " -v" + bf_out
+    param.outfile = "vdif"
 }
 else {
     bf_out = " -p" + bf_out
+    param.outfile = "fits"
 }
 fi
 
@@ -97,7 +99,7 @@ process make_beam {
     tuple val(channel_id), val(gpubox), val(points)
 
     output:
-    tuple val(channel_id), val(points), path("*fits")
+    path("*${param.outfile}")
 
     """
     if ${params.offringa}; then
@@ -116,51 +118,6 @@ process make_beam {
         -P ${params.pointing_file} \
         ${jones_option} \
         ${bf_out} \
-    mv */*fits .
-    """
-}
-
-
-process make_beam_ipfb {
-    label 'gpu'
-    label 'vcsbeam'
-    publishDir "${params.vcsdir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*hdr"
-    publishDir "${params.vcsdir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*vdif"
-
-    time "${ task.attempt * ( Float.valueOf(dur) * ( params.bm_read + params.bm_cal * ( params.bm_beam + params.bm_write ) ) + 200 ) * 1.2 }s"
-    errorStrategy 'retry'
-    maxRetries 2
-    maxForks params.max_gpu_jobs
-
-    when:
-    point != " " //Don't run if blank pointing given
-
-    input:
-    tuple val(utc), val(begin), val(end), val(dur)
-    tuple val(channel_id), val(gpubox), val(point)
-
-    output:
-    tuple val(channel_id), val(point), path("*fits"), emit: fits
-    tuple val(channel_id), val(point), path("*hdr"), path("*vdif"),  emit: vdif
-
-    """
-    if ${params.offringa}; then
-        DI_file="calibration_solution.bin"
-        jones_option="-O ${params.didir}/calibration_solution.bin -C ${gpubox.toInteger() - 1}"
-    else
-        jones_option="-J ${params.didir}/DI_JonesMatrices_node${gpubox}.dat"
-    fi
-
-    if ${params.publish_fits}; then
-        mkdir -p -m 771 ${params.vcsdir}/${params.obsid}/pointings/${point}
-    fi
-    
-    srun make_beam -o ${params.obsid} -b ${begin} -e ${end} -a 128 -n 128 \
--f ${channel_id} \${jones_option} \
--d ${params.vcsdir}/${params.obsid}/combined -P ${point} \
--r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
--p -v -t 6000 -F ${params.didir}/flagged_tiles.txt -z ${utc} -g 11
-    mv */*fits .
     """
 }
 
@@ -200,28 +157,5 @@ workflow beamform {
             pointing_file,
         )
     emit:
-        make_beam.out // [ pointing, fits_file ]
-}
-
-workflow beamform_ipfb {
-    // Beamforms MWA voltage data and performs and Inverse Polyphase Filter Bank to increase time resolution
-    take:
-        // Metadata in the format [ utc, begin(GPS), end(GPS), duration(s) ]
-        utc_beg_end_dur
-        // Channel pair in the format [ channel_id, gpubox_id ]
-        channels
-        // List of pointings in the format HH:MM:SS_+-DD:MM:SS
-        pointings
-    main:
-        // Combine the each channel with each pointing so you make a job for each combination
-        chan_point = channels.combine( pointings.flatten().map{ [ it ] } )
-        make_beam_ipfb(
-            utc_beg_end_dur,
-            chan_point
-        )
-        // Group by the pointing for splicing
-        splice( make_beam_ipfb.out.fits.groupTuple( by: 1, size: 24 ) )
-    emit:
-        fits = splice.out // [ pointing, fits_file ]
-        vdif = make_beam_ipfb.out.vdif // [ channel_id, point, hdr, vdif ]
+        make_beam.out // output files
 }
