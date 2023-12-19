@@ -1,12 +1,12 @@
 
 // Set up beamformer output types
-bf_out = " -p "
+bf_out = " -p -R NONE -U 0,0 -O -X --smart "
 if ( params.summed ) {
-    bf_out = bf_out + "-s "
+    bf_out = bf_out + "-N 1 "
 }
-if ( params.incoh ) {
-    bf_out = bf_out + "-i "
-}
+// if ( params.incoh ) {
+//     bf_out = bf_out + "-i "
+// }
 
 
 process beamform_setup {
@@ -20,50 +20,38 @@ process beamform_setup {
     import csv
     import numpy as np
 
-    from vcstools.metadb_utils import obs_max_min, get_channels, ensure_metafits
-    from vcstools.general_utils import gps_to_utc, mdir, create_link
+    from mwa_search.metafits_utils import load_metafits_context, obs_max_min, mdir
 
-    # Work out begin and end time of obs
-    if "${params.all}" == "true":
-        beg, end = obs_max_min(${params.obsid})
-    else:
-        beg = ${params.begin}
-        end = ${params.end}
+    # Load metafits context for future use
+    context = load_metafits_context(
+        "${params.vcsdir}/${params.obsid}",
+        "${params.obsid}",
+        "${params.obsid}.metafits",
+    )
+
+    # Get the channel numbers
+    channels = np.array([c.rec_chan_number for c in context.metafits_coarse_chans])
+
+    # Work out begin and end time of observation available on disk
+    beg, end = obs_max_min(${params.obsid}, channels[0])
+    if not "${params.all}" == "true":
+        beg = np.max([${params.begin}, beg])
+        end = np.min([${params.end}, end])
     dur = end - beg + 1
     with open("${params.obsid}_beg_end_dur.txt", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
         spamwriter.writerow([beg, end, dur])
 
-    # Find the channels
-    channels = get_channels(${params.obsid})
-    # Reorder channels to handle the order switch at 128
-    channels = np.array(channels, dtype=np.int)
-    hichans = [c for c in channels if c>128]
-    lochans = [c for c in channels if c<=128]
-    lochans.extend(list(reversed(hichans)))
-    ordered_channels = lochans
     with open("${params.obsid}_channels.txt", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
-        for gpubox, chan in enumerate(ordered_channels, 1):
+        for gpubox, chan in enumerate(channels, 1):
             spamwriter.writerow([chan, "{:0>3}".format(gpubox)])
 
-    # Ensure the metafits files is there
-    ensure_metafits(
-        "${params.vcsdir}/${params.obsid}",
-        "${params.obsid}",
-        "${params.obsid}_metafits_ppds.fits",
-    )
-
-    # Covert gps time to utc
-    with open("${params.obsid}_utc.txt", "w") as outfile:
-        spamwriter = csv.writer(outfile, delimiter=',')
-        spamwriter.writerow([gps_to_utc(beg)])
-
     # Make sure all the required directories are made
-    mdir("${params.vcsdir}/${params.obsid}", "Data")
-    mdir("${params.vcsdir}/${params.obsid}", "Products")
-    mdir("${params.vcsdir}/batch", "Batch")
-    mdir("${params.vcsdir}/${params.obsid}/pointings", "Pointings")
+    mdir("${params.vcsdir}/${params.obsid}", "Data", ${params.gid})
+    mdir("${params.vcsdir}/${params.obsid}", "Products", ${params.gid})
+    mdir("${params.vcsdir}/batch", "Batch", ${params.gid})
+    mdir("${params.vcsdir}/${params.obsid}/pointings", "Pointings", ${params.gid})
     """
 }
 
@@ -111,16 +99,20 @@ process make_beam {
     """
     if ${params.offringa}; then
         DI_file="calibration_solution.bin"
-        jones_option="-O ${params.didir}/calibration_solution.bin -C ${gpubox.toInteger() - 1}"
+        jones_option="-C ${params.didir}/calibration_solution.bin -c ${params.didir}/../${params.calid}.metafits"
     else
-        jones_option="-J ${params.didir}/DI_JonesMatrices_node${gpubox}.dat"
+        DI_file="hyperdrive_solutions.bin"
+        jones_option="-C ${params.didir}/calibration_solution.bin -c ${params.didir}/../${params.calid}.metafits"
     fi
 
-    srun make_beam -o ${params.obsid} -b ${begin} -e ${end} -a 128 -n 128 \
--f ${channel_id} \${jones_option} \
--d ${params.vcsdir}/${params.obsid}/combined -P ${points.join(",").replaceAll(~/\s/,"")} \
--r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
-${bf_out} -t 6000 -F ${params.didir}/flagged_tiles.txt  -z ${utc}
+    srun make_mwa_tied_array_beam -m ${params.vcsdir}/${params.obsid}/${params.obsid}.metafits \
+        -b ${begin} \
+        -T ${dur} \
+        -f ${channel_id} \
+        -d ${params.vcsdir}/${params.obsid}/combined \
+        -P ${params.pointing_file} \
+        ${jones_option} \
+        ${bf_out} \
     mv */*fits .
     """
 }
@@ -226,10 +218,8 @@ workflow beamform {
             utc_beg_end_dur,
             chan_point
         )
-        // Make sure the pointings and fits are in the same order then transpose to "flatten" out multiple pointings then group by the pointing for splicing
-        splice( make_beam.out.map{ chan, pointings, fits -> [ chan, pointings.sort(), [fits].flatten().findAll{ it != null }.sort() ] }.transpose().groupTuple( by: 1, size: 24 ) )
     emit:
-        splice.out // [ pointing, fits_file ]
+        make_beam.out // [ pointing, fits_file ]
 }
 
 workflow beamform_ipfb {
