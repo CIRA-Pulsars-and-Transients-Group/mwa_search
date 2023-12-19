@@ -96,7 +96,7 @@ process make_beam {
 
     input:
     tuple val(begin), val(end), val(dur)
-    tuple val(channel_id), val(gpubox), val(points)
+    tuple val(channel_id)
 
     output:
     path("*${param.outfile}")
@@ -147,14 +147,11 @@ workflow beamform {
         beg_end_dur
         // The index of the first channel
         first_channel
-        // params.pointing_file containing a list of pointings in the format HH:MM:SS +-DD:MM:SS
-        pointing_file
     main:
         // Combine the each channel with each pointing (group) so you make a job for each combination
         make_beam(
             beg_end_dur,
             first_channel,
-            pointing_file,
         )
     emit:
         make_beam.out // output files
