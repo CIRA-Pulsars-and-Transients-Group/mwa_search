@@ -11,13 +11,6 @@ if ( params.help ) {
              |  --begin     First GPS time to process [no default]
              |  --end       Last GPS time to process [no default]
              |  --all       Use entire observation span. Use instead of -b & -e. [default: ${params.all}]
-             |  --publish_fits
-             |              Publish to the fits files to the vcs subdirectory.
-             |
-             |Pointing arguments (one is required):
-             |  --pointings A comma-separated list of pointings with the RA and Dec separated
-             |              by _ in the format HH:MM:SS_+DD:MM:SS, e.g.
-             |              "19:23:48.53_-20:31:52.95,19:23:40.00_-20:31:50.00" [default: None]
              |  --pointing_file
              |              A file containing pointings with the RA and Dec separated by _
              |              in the format HH:MM:SS_+DD:MM:SS on each line, e.g.
@@ -41,36 +34,13 @@ if ( params.help ) {
     exit(0)
 }
 
-if ( params.pointing_file ) {
-    pointings = Channel
-        .fromPath(params.pointing_file)
-        .splitCsv()
-}
-else if ( params.pointings ) {
-    pointings = Channel
-        .from(params.pointings.split(","))
-}
-else {
-    println "No pointings given. Either use --pointing_file or --pointings. Exiting"
-    exit(1)
-}
-
-include { pre_beamform; beamform; beamform_ipfb } from './beamform_module'
+include { pre_beamform; beamform } from './beamform_module'
 
 workflow {
     pre_beamform()
-    if ( params.ipfb ) {
-        beamform_ipfb(
-            pre_beamform.out.utc_beg_end_dur,
-            pre_beamform.out.channels,
-            pointings
-        )
-    }
-    else {
-        beamform(
-            pre_beamform.out.utc_beg_end_dur,
-            pre_beamform.out.channels,
-            pointings
-        )
-    }
+    beamform(
+        pre_beamform.out.beg_end_dur,
+        pre_beamform.out.channels[0],
+        params.pointing_file
+    )
 }

@@ -1,19 +1,22 @@
 
 // Set up beamformer output types
-bf_out = " -p -R NONE -U 0,0 -O -X --smart "
+bf_out = " -R NONE -U 0,0 -O -X --smart "
 if ( params.summed ) {
-    bf_out = bf_out + "-N 1 "
+    bf_out = " -N 1" + bf_out
 }
-// if ( params.incoh ) {
-//     bf_out = bf_out + "-i "
-// }
+if ( params.ipfb ) {
+    bf_out = " -v" + bf_out
+}
+else {
+    bf_out = " -p" + bf_out
+}
+fi
 
 
 process beamform_setup {
     output:
     path "${params.obsid}_beg_end_dur.txt",  emit: beg_end_dur
     path "${params.obsid}_channels.txt", emit: channels
-    path "${params.obsid}_utc.txt",      emit: utc
 
     """
     #!/usr/bin/env python
@@ -90,7 +93,7 @@ process make_beam {
     maxForks params.max_gpu_jobs
 
     input:
-    tuple val(utc), val(begin), val(end), val(dur)
+    tuple val(begin), val(end), val(dur)
     tuple val(channel_id), val(gpubox), val(points)
 
     output:
@@ -161,27 +164,6 @@ process make_beam_ipfb {
     """
 }
 
-process splice {
-    label 'cpu'
-    label 'vcstools'
-
-    publishDir "${params.vcsdir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits
-    time '3h'
-    maxForks 300
-    errorStrategy 'retry'
-    maxRetries 1
-
-    input:
-    tuple val(chans), val(point), path(unspliced)
-
-    output:
-    tuple val(point), path("${params.obsid}*fits")
-
-    """
-    splice_wrapper.py -o ${params.obsid} -c ${chans.join(" ")}
-    """
-}
-
 
 workflow pre_beamform {
     // Performs metadata calls and data checks
@@ -190,14 +172,13 @@ workflow pre_beamform {
         // Grab outputs from the CSVs
         beg_end_dur = beamform_setup.out.beg_end_dur.splitCsv()
         channels    = beamform_setup.out.channels.splitCsv()
-        utc         = beamform_setup.out.utc.splitCsv().flatten()
 
         combined_data_check(beamform_setup.out.beg_end_dur.splitCsv())
     emit:
         // Combine all the constant metadata and make it a value channel (with collect) so it will be used for each job
         // Format:  [ utc, begin(GPS), end(GPS), duration(s) ]
-        utc_beg_end_dur = utc.concat( beg_end_dur ).collect()
-        // Channel pair in the format [ channel_id, gpubox_id ]
+        beg_end_dur
+        // Channels in the format [ channel_id ]
         channels
 }
 
@@ -205,18 +186,18 @@ workflow pre_beamform {
 workflow beamform {
     // Beamforms MWA voltage data
     take:
-        // Metadata in the format [ utc, begin(GPS), end(GPS), duration(s) ]
-        utc_beg_end_dur
-        // Channel pair in the format [ channel_id, gpubox_id ]
-        channels
-        // List of pointings in the format HH:MM:SS_+-DD:MM:SS
-        pointings
+        // Metadata in the format [ begin(GPS), end(GPS), duration(s) ]
+        beg_end_dur
+        // The index of the first channel
+        first_channel
+        // params.pointing_file containing a list of pointings in the format HH:MM:SS +-DD:MM:SS
+        pointing_file
     main:
         // Combine the each channel with each pointing (group) so you make a job for each combination
-        chan_point = channels.combine( pointings.flatten().collate( params.max_pointings ).map{ [ it ] } )
         make_beam(
-            utc_beg_end_dur,
-            chan_point
+            beg_end_dur,
+            first_channel,
+            pointing_file,
         )
     emit:
         make_beam.out // [ pointing, fits_file ]
