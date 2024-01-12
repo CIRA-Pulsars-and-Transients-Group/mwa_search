@@ -6,13 +6,12 @@ if ( params.summed ) {
 }
 if ( params.ipfb ) {
     bf_out = " -v" + bf_out
-    param.outfile = "vdif"
+    params.outfile = "vdif"
 }
 else {
     bf_out = " -p" + bf_out
-    param.outfile = "fits"
+    params.outfile = "fits"
 }
-fi
 
 
 process beamform_setup {
@@ -38,10 +37,10 @@ process beamform_setup {
     channels = np.array([c.rec_chan_number for c in context.metafits_coarse_chans])
 
     # Work out begin and end time of observation available on disk
-    beg, end = obs_max_min(${params.obsid}, channels[0])
+    beg, end = obs_max_min("${params.vcsdir}/${params.obsid}/combined", channels[0])
     if not "${params.all}" == "true":
-        beg = np.max([${params.begin}, beg])
-        end = np.min([${params.end}, end])
+        beg = np.max([int("${params.begin}"), beg])
+        end = np.min([int("${params.end}"), end])
     dur = end - beg + 1
     with open("${params.obsid}_beg_end_dur.txt", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
@@ -49,8 +48,7 @@ process beamform_setup {
 
     with open("${params.obsid}_channels.txt", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
-        for gpubox, chan in enumerate(channels, 1):
-            spamwriter.writerow([chan, "{:0>3}".format(gpubox)])
+        spamwriter.writerow([channels[0]])
 
     # Make sure all the required directories are made
     mdir("${params.vcsdir}/${params.obsid}", "Data", ${params.gid})
@@ -89,7 +87,7 @@ process make_beam {
     label 'gpu'
     label 'vcsbeam'
 
-    time "${ task.attempt * ( Float.valueOf(dur) * ( params.bm_read + params.bm_cal + points.size() * ( params.bm_beam + params.bm_write ) ) + 200 ) * 1.2 }s"
+    time '6h' 
     errorStrategy 'retry'
     maxRetries 2
     maxForks params.max_gpu_jobs
@@ -99,25 +97,19 @@ process make_beam {
     tuple val(channel_id)
 
     output:
-    path("*${param.outfile}")
+    path("*${params.outfile}")
 
     """
-    if ${params.offringa}; then
-        DI_file="calibration_solution.bin"
-        jones_option="-C ${params.didir}/calibration_solution.bin -c ${params.didir}/../${params.calid}.metafits"
-    else
-        DI_file="hyperdrive_solutions.bin"
-        jones_option="-C ${params.didir}/calibration_solution.bin -c ${params.didir}/../${params.calid}.metafits"
-    fi
-
     srun make_mwa_tied_array_beam -m ${params.vcsdir}/${params.obsid}/${params.obsid}.metafits \
         -b ${begin} \
         -T ${dur} \
         -f ${channel_id} \
         -d ${params.vcsdir}/${params.obsid}/combined \
         -P ${params.pointing_file} \
-        ${jones_option} \
-        ${bf_out} \
+        -C ${params.didir}/${params.calid}_hyperdrive_solutions.bin \
+        -c ${params.didir}/../vis/${params.calid}.metafits \
+        ${bf_out} 
+    mv ${workDir}/*/*/*.fits ${workDir}/
     """
 }
 

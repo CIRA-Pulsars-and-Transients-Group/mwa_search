@@ -40,7 +40,6 @@ workflow {
     pre_beamform()
     beamform(
         pre_beamform.out.beg_end_dur,
-        pre_beamform.out.channels[0],
-        params.pointing_file
+        pre_beamform.out.channels,
     )
 }
