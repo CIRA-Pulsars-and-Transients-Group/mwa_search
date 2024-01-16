@@ -18,6 +18,7 @@ process beamform_setup {
     output:
     path "${params.obsid}_beg_end_dur.txt",  emit: beg_end_dur
     path "${params.obsid}_channels.txt", emit: channels
+    path "${params.obsid}_pointings.txt", emit: pointings
 
     """
     #!/usr/bin/env python
@@ -55,6 +56,15 @@ process beamform_setup {
     mdir("${params.vcsdir}/${params.obsid}", "Products", ${params.gid})
     mdir("${params.vcsdir}/batch", "Batch", ${params.gid})
     mdir("${params.vcsdir}/${params.obsid}/pointings", "Pointings", ${params.gid})
+
+    with open("${params.pointing_file}") as infile:
+        pointings = infile.readlines()
+    with open("${params.obsid}_pointings.txt", "w") as outfile:
+        for p in pointings:
+            pointing_dir = '_'.join(p.split())
+            mdir("${params.vcsdir}/${params.obsid}/pointings/pointing_dir", "Pointing Directory", ${params.gid})
+            spamwriter = csv.writer(outfile, delimiter=',')
+            spamwriter.writerow([pointing_dir])
     """
 }
 
@@ -108,8 +118,16 @@ process make_beam {
         -P ${params.pointing_file} \
         -C ${params.didir}/${params.calid}_hyperdrive_solutions.bin \
         -c ${params.didir}/../vis/${params.calid}.metafits \
-        ${bf_out} 
-    mv ${workDir}/*/*/*.fits ${workDir}/
+        ${bf_out}
+    """
+}
+
+
+process move_beamformed_data {
+    input:
+    tuple val(pointing)
+    """
+    mv ${Workdir}/*/*/*${pointing}*.fits ${params.vcsdir}/${params.obsid}/pointings/${pointing}
     """
 }
 
@@ -121,6 +139,7 @@ workflow pre_beamform {
         // Grab outputs from the CSVs
         beg_end_dur = beamform_setup.out.beg_end_dur.splitCsv()
         channels    = beamform_setup.out.channels.splitCsv()
+        pointings   = beamform_setup.out.pointings.splitCsv()
 
         combined_data_check(beamform_setup.out.beg_end_dur.splitCsv())
     emit:
@@ -129,6 +148,7 @@ workflow pre_beamform {
         beg_end_dur
         // Channels in the format [ channel_id ]
         channels
+        pointings
 }
 
 
@@ -139,11 +159,15 @@ workflow beamform {
         beg_end_dur
         // The index of the first channel
         first_channel
+        pointings
     main:
         // Combine the each channel with each pointing (group) so you make a job for each combination
         make_beam(
             beg_end_dur,
             first_channel,
+        )
+        move_beamformed_data(
+            pointings,
         )
     emit:
         make_beam.out // output files
