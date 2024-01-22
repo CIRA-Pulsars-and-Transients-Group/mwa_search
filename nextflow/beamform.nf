@@ -13,8 +13,8 @@ if ( params.help ) {
              |  --all       Use entire observation span. Use instead of -b & -e. [default: ${params.all}]
              |  --pointing_file
              |              A file containing pointings with the RA and Dec separated by _
-             |              in the format HH:MM:SS_+DD:MM:SS on each line, e.g.
-             |              "19:23:48.53_-20:31:52.95\\n19:23:40.00_-20:31:50.00" [default: None]
+             |              in the format HH:MM:SS +DD:MM:SS on each line, e.g.
+             |              "19:23:48.53 -20:31:52.95\\n19:23:40.00 -20:31:50.00" [default: None]
              |
              |Beamforming types arguments (optional):
              |  --summed   Sum the Stoke paramters [default: ${params.summed}]
@@ -41,5 +41,6 @@ workflow {
     beamform(
         pre_beamform.out.beg_end_dur,
         pre_beamform.out.channels,
+        pre_beamform.out.pointings,
     )
 }

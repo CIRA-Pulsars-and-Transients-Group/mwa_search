@@ -22,6 +22,7 @@ process beamform_setup {
 
     """
     #!/usr/bin/env python
+    import sys
     import csv
     import numpy as np
 
@@ -43,9 +44,9 @@ process beamform_setup {
         beg = np.max([int("${params.begin}"), beg])
         end = np.min([int("${params.end}"), end])
     dur = end - beg + 1
-    with open("${params.obsid}_beg_end_dur.txt", "w") as outfile:
-        spamwriter = csv.writer(outfile, delimiter=',')
-        spamwriter.writerow([beg, end, dur])
+    if dur < 0:
+        print("negative duration")
+        sys.exit(0)
 
     with open("${params.obsid}_channels.txt", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
@@ -59,12 +60,23 @@ process beamform_setup {
 
     with open("${params.pointing_file}") as infile:
         pointings = infile.readlines()
-    with open("${params.obsid}_pointings.txt", "w") as outfile:
+    npoints = len(pointings)
+    with open("${params.obsid}_pointings.txt", "w", newline='') as outfile:
+        spamwriter = csv.writer(outfile, delimiter=',')
         for p in pointings:
-            pointing_dir = '_'.join(p.split())
-            mdir("${params.vcsdir}/${params.obsid}/pointings/pointing_dir", "Pointing Directory", ${params.gid})
-            spamwriter = csv.writer(outfile, delimiter=',')
+            rah, ram, ras = p.split()[0].split(":")
+            dech, decm, decs = p.split()[1].split(":")
+            ras = np.round(float(ras), 2)
+            decs = np.round(float(decs), 2)
+            ra = ':'.join([rah, ram, format(ras, "05.2f")])
+            dec = ':'.join([dech, decm, format(decs, "05.2f")])
+            pointing_dir = '_'.join([ra, dec])
+            mdir(f"${params.vcsdir}/${params.obsid}/pointings/{pointing_dir}", "Pointing Directory", ${params.gid})
             spamwriter.writerow([pointing_dir])
+    
+    with open("${params.obsid}_beg_end_dur.txt", "w") as outfile:
+        spamwriter = csv.writer(outfile, delimiter=',')
+        spamwriter.writerow([beg, end, dur, npoints])
     """
 }
 
@@ -73,7 +85,7 @@ process combined_data_check {
     params.no_combined_check == false
 
     input:
-    tuple val(begin), val(end), val(dur)
+    tuple val(begin), val(end), val(dur), val(npoints)
 
     """
     #!/usr/bin/env python
@@ -99,12 +111,13 @@ process make_beam {
 
     time '6h' 
     errorStrategy 'retry'
-    maxRetries 2
+    maxRetries 0
     maxForks params.max_gpu_jobs
 
     input:
-    tuple val(begin), val(end), val(dur)
+    tuple val(begin), val(end), val(dur), val(npoints)
     tuple val(channel_id)
+    path(pointings)
 
     output:
     path("*${params.outfile}")
@@ -119,15 +132,8 @@ process make_beam {
         -C ${params.didir}/${params.calid}_hyperdrive_solutions.bin \
         -c ${params.didir}/../vis/${params.calid}.metafits \
         ${bf_out}
-    """
-}
-
-
-process move_beamformed_data {
-    input:
-    tuple val(pointing)
-    """
-    mv ${Workdir}/*/*/*${pointing}*.fits ${params.vcsdir}/${params.obsid}/pointings/${pointing}
+    ls \$(pwd)
+    for f in `cat ${pointings} | tr -d '\r'` ; do mv ./*\${f}*.fits ${params.vcsdir}/${params.obsid}/pointings/\$f/; done
     """
 }
 
@@ -139,7 +145,7 @@ workflow pre_beamform {
         // Grab outputs from the CSVs
         beg_end_dur = beamform_setup.out.beg_end_dur.splitCsv()
         channels    = beamform_setup.out.channels.splitCsv()
-        pointings   = beamform_setup.out.pointings.splitCsv()
+        pointings   = beamform_setup.out.pointings
 
         combined_data_check(beamform_setup.out.beg_end_dur.splitCsv())
     emit:
@@ -165,10 +171,8 @@ workflow beamform {
         make_beam(
             beg_end_dur,
             first_channel,
-        )
-        move_beamformed_data(
             pointings,
         )
     emit:
         make_beam.out // output files
-}
+} 
