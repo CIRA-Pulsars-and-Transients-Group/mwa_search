@@ -83,7 +83,6 @@ process ddplan {
         output = dd_plan(${centre_freq}, 30.72, 3072, 0.1, ${params.dm_min}, ${params.dm_max},
                          min_dm_step=${params.dm_min_step}, max_dm_step=${params.dm_max_step},
                          max_dms_per_job=${params.max_dms_per_job})
-        print("Done getting DD plan")
     else:
         if '${name}'.startswith('dm_'):
             dm = float('${name}'.split('dm_')[-1].split('_')[0])
@@ -117,24 +116,19 @@ process ddplan {
         dm_min, dm_max, dm_step, ndm, timeres, downsamp, nsub, total_work_factor = dd_line
         while total_work_factor > ${params.max_work_function}:
             # Ouput a file with just the max_work_function worth of DMs
-            wf_dm_step = int(${params.max_work_function} * downsamp)
             with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{wf_dm_step}.txt", "w") as outfile:
                 spamwriter = csv.writer(outfile, delimiter=',')
                 spamwriter.writerow([
                     dm_min,
-                    dm_min + dm_step * wf_dm_step,
+                    dm_max,
                     dm_step,
-                    wf_dm_step,
+                    ndm,
                     timeres,
                     downsamp,
                     nsub,
-                    ${params.max_work_function}
+                    total_work_factor
                 ])
             wfi += 1
-            # update dd_line for next part
-            dm_min = dm_min + dm_step * wf_dm_step
-            ndm -= wf_dm_step
-            total_work_factor -= ${params.max_work_function}
 
         # Append the leftover to the batch list
 
@@ -142,7 +136,6 @@ process ddplan {
         wf_sum += total_work_factor
         if wf_sum > ${params.max_work_function}:
             # Ouput file with multiple ddplan lines
-            wf_dm_step = int((wf_sum - ${params.max_work_function}) * downsamp)
             local_dm_steps = int(wf_dm_step + np.array(work_function_batch).sum(axis=0)[3])
             with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{local_dm_steps}.txt", "w") as outfile:
                 spamwriter = csv.writer(outfile, delimiter=',')
@@ -151,26 +144,20 @@ process ddplan {
                 # Ouput final new line
                 spamwriter.writerow([
                     dm_min,
-                    dm_min + dm_step * wf_dm_step,
+                    dm_max,
                     dm_step,
-                    wf_dm_step,
+                    ndm,
                     timeres,
                     downsamp,
                     nsub,
-                    wf_sum - ${params.max_work_function}
+                    total_work_factor
                 ])
                 wfi += 1
                 work_function_batch = []
 
-            # Prepare new plan for next batch
-            wf_dm_step = int((wf_sum - ${params.max_work_function})  * downsamp)
-            dm_min = dm_min + dm_step * wf_dm_step
-            ndm -= wf_dm_step
-            total_work_factor -= (wf_sum - ${params.max_work_function})
             wf_sum = 0
 
         work_function_batch.append([dm_min, dm_max, dm_step, ndm, timeres, downsamp, nsub, total_work_factor])
-        print("Done setting up work function batch")
 
     # Write final file
     local_dm_steps = int(np.array(work_function_batch).sum(axis=0)[3])
