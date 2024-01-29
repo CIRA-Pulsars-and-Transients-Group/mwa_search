@@ -110,7 +110,7 @@ process make_beam {
     label 'vcsbeam'
 
     time '6h' 
-    errorStrategy 'retry'
+    errorStrategy 'ignore'
     maxRetries 0
     maxForks params.max_gpu_jobs
 
@@ -118,9 +118,6 @@ process make_beam {
     tuple val(begin), val(end), val(dur), val(npoints)
     tuple val(channel_id)
     path(pointings)
-
-    output:
-    path("*${params.outfile}")
 
     """
     srun make_mwa_tied_array_beam -m ${params.vcsdir}/${params.obsid}/${params.obsid}.metafits \
@@ -132,7 +129,6 @@ process make_beam {
         -C ${params.didir}/${params.calid}_hyperdrive_solutions.bin \
         -c ${params.didir}/../vis/${params.calid}.metafits \
         ${bf_out}
-    ls \$(pwd)
     for f in `cat ${pointings} | tr -d '\r'` ; do mv ./*\${f}*.fits ${params.vcsdir}/${params.obsid}/pointings/\$f/; done
     """
 }
@@ -173,6 +169,4 @@ workflow beamform {
             first_channel,
             pointings,
         )
-    emit:
-        make_beam.out // output files
 } 
