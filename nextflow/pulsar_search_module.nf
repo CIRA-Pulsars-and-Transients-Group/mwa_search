@@ -34,7 +34,7 @@ process get_freq_and_dur {
     tuple val(obsid), path(fits_dir)
 
     output:
-    tuple path(fits_dir), path("name_freq_dur.csv")
+    tuple val(obsid), path(fits_dir), path("name_freq_dur.csv")
 
     """
     #!/usr/bin/env python
@@ -66,10 +66,10 @@ process get_freq_and_dur {
 
 process ddplan {
     input:
-    tuple val(name), path(fits_file), val(centre_freq), val(dur)
+    tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur)
 
     output:
-    tuple val(name), path(fits_file), val(centre_freq), val(dur), path('DDplan*.txt')
+    tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur), path('DDplan*.txt')
 
     """
     #!/usr/bin/env python
@@ -191,7 +191,7 @@ process search_dd_fft_acc {
     maxForks params.max_search_jobs
 
     input:
-    tuple val(name), path(fits_files), val(freq), val(dur), val(ndms_job), val(ddplans)
+    tuple val(obsid), val(name), path(fits_path), val(freq), val(dur), val(ndms_job), val(ddplans)
 
     output:
     tuple val(name), path("*ACCEL_${params.zmax}"), path("*.inf"), path("*.singlepulse"), path('*.cand')
@@ -215,7 +215,7 @@ process search_dd_fft_acc {
         echo "    dm_min: \${dm_min}, dm_max: \${dm_max}, dm_step: \${dm_step}"
         echo "    ndm: \${ndm}, timeres: \${timeres}, downsamp: \${downsamp}, nsub: \${nsub},"
         prepsubband -ncpus ${task.cpus} -lodm \${dm_min} -dmstep \${dm_step} -numdms \${ndm} -zerodm -nsub \${nsub} \
--downsamp \${downsamp} -numout \${numout} -o ${name} *.fits
+-downsamp \${downsamp} -numout \${numout} -o ${name} ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
     done
 
     printf "\\n#Performing the FFTs at \$(date +"%Y-%m-%d_%H:%m:%S") -----------------------------------------------------\\n"
@@ -403,7 +403,7 @@ workflow pulsar_search {
         get_freq_and_dur( name_fits_files ) // [ name, fits_file, freq, dur ]
 
         // Grab the meta data out of the CSV
-        name_fits_freq_dur = get_freq_and_dur.out.map { fits, meta -> [ meta.splitCsv()[0][0], fits, meta.splitCsv()[0][1], meta.splitCsv()[0][2] ] }
+        name_fits_freq_dur = get_freq_and_dur.out.map { obsid, fits, meta -> [ obsid, meta.splitCsv()[0][0], fits, meta.splitCsv()[0][1], meta.splitCsv()[0][2] ] }
         ddplan( name_fits_freq_dur )
         // ddplan's output format is [ name, fits_file, centrefreq(MHz), duration(s), DDplan_file ]
 
@@ -412,8 +412,8 @@ workflow pulsar_search {
         // The DDplan file has the name format DDplan_{i}_a{total_dm_steps}_n{local_dm_steps}.txt
         search_dd_fft_acc(
             ddplan.out.transpose()
-            .map { name, fits, freq, dur, ddplan ->
-                [ groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
+            .map { obsid, name, fits, freq, dur, ddplan ->
+                [ groupKey(obsid, name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
             }
         )
         // Output format: [ name,  ACCEL_summary, presto_inf, single_pulse, periodic_candidates ]
