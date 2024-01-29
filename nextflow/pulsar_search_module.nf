@@ -31,7 +31,7 @@ def search_time_estimate(dur, ndm) {
 
 process get_freq_and_dur {
     input:
-    tuple val(name), path(fits_file)
+    tuple path(fits_dir)
 
     output:
     tuple val(name), path(fits_file), path("freq_dur.csv")
@@ -41,14 +41,19 @@ process get_freq_and_dur {
 
     import os
     import csv
+    import glob
     from astropy.io import fits
 
     # Read in fits file to read its header
-    hdul = fits.open(r"${fits_file}".replace("\\\\", ""))
-    # Grab the centre frequency in MHz
-    freq = hdul[0].header['OBSFREQ']
-    # Calculate the observation duration in seconds
-    dur = hdul[1].header['NAXIS2'] * hdul[1].header['TBIN'] * hdul[1].header['NSBLK']
+    dur = 0
+    for i, fits_file in glob.glob("${fits_dir}".replace("\\\\", "")/*.fits"):
+        if i == 0:
+            name = f"${params.cand}_{fits.split("_ch")[0]}"
+            # Grab the centre frequency in MHz
+            freq = hdul[0].header['OBSFREQ']
+        hdul = fits.open(fits_file)
+        # Calculate the observation duration in seconds
+        dur += hdul[1].header['NAXIS2'] * hdul[1].header['TBIN'] * hdul[1].header['NSBLK']
 
     # Export both values as a CSV for easy output
     with open("freq_dur.csv", "w") as outfile:
