@@ -7,7 +7,8 @@ if ( params.help ) {
              |                  The fits files must be in the format
              |                  <obsid>_<pointing>_ch<min_chan>-<max_chan>_00??.fits
              |Required argurments:
-             |  --fits_dir The fits file to search [no default]
+             |  --obsid     The observation ID of the data to process [no default]
+             |  --fits_dir  The fits file to search [no default]
              |
              |Dedispersion arguments (optional):
              |  --dm_min    Minimum DM to search over [default: ${params.dm_min}]
@@ -47,12 +48,15 @@ if ( params.help ) {
     exit(0)
 }
 
+include { pulsar_search; single_pulse_search } from './pulsar_search_module'
+include { classifier                         } from './classifier_module'
+
 workflow {
     if ( params.sp ) {
-        single_pulse_search( params.fits_dir )
+        single_pulse_search( [params.obsid, params.fits_dir] )
     }
     else {
-        pulsar_search( params.fits_dir } )
+        pulsar_search( [params.obsid, params.fits_dir] )
         classifier( pulsar_search.out )
     }
 }

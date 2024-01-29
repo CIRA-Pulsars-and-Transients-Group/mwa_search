@@ -31,10 +31,10 @@ def search_time_estimate(dur, ndm) {
 
 process get_freq_and_dur {
     input:
-    tuple path(fits_dir)
+    tuple val(obsid), path(fits_dir)
 
     output:
-    tuple val(name), path(fits_file), path("freq_dur.csv")
+    tuple path(fits_dir), path("name_freq_dur.csv")
 
     """
     #!/usr/bin/env python
@@ -46,19 +46,21 @@ process get_freq_and_dur {
 
     # Read in fits file to read its header
     dur = 0
-    for i, fits_file in glob.glob("${fits_dir}".replace("\\\\", "")/*.fits"):
+    pointing_dir = "${fits_dir}".replace('\\\\', '')
+    print(pointing_dir)
+    for i, fits_file in enumerate(glob.glob(f"${params.vcsdir}/${obsid}/pointings/{pointing_dir}/*.fits")):
+        hdul = fits.open(fits_file)
         if i == 0:
-            name = f"${params.cand}_{fits.split("_ch")[0]}"
+            name = f"${params.cand}_{fits_file.split('/')[-1].split('_ch')[0]}"
             # Grab the centre frequency in MHz
             freq = hdul[0].header['OBSFREQ']
-        hdul = fits.open(fits_file)
         # Calculate the observation duration in seconds
         dur += hdul[1].header['NAXIS2'] * hdul[1].header['TBIN'] * hdul[1].header['NSBLK']
 
     # Export both values as a CSV for easy output
-    with open("freq_dur.csv", "w") as outfile:
+    with open("name_freq_dur.csv", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
-        spamwriter.writerow([freq, dur])
+        spamwriter.writerow([name, freq, dur])
     """
 }
 
@@ -395,13 +397,13 @@ process single_pulse_searcher {
 
 workflow pulsar_search {
     take:
-        name_fits_files // [val(candidateName_obsid_pointing), path(fits_files)]
+        name_fits_files // [val(obsid), path(fits_files)]
     main:
         // Grab meta data from the fits file
         get_freq_and_dur( name_fits_files ) // [ name, fits_file, freq, dur ]
 
         // Grab the meta data out of the CSV
-        name_fits_freq_dur = get_freq_and_dur.out.map { name, fits, meta -> [ name, fits, meta.splitCsv()[0][0], meta.splitCsv()[0][1] ] }
+        name_fits_freq_dur = get_freq_and_dur.out.map { fits, meta -> [ meta.splitCsv()[0][0], fits, meta.splitCsv()[0][1], meta.splitCsv()[0][2] ] }
         ddplan( name_fits_freq_dur )
         // ddplan's output format is [ name, fits_file, centrefreq(MHz), duration(s), DDplan_file ]
 
@@ -444,7 +446,7 @@ workflow pulsar_search {
 
         // Combined the grouped single pulse files with the fits files
         single_pulse_searcher(
-            inf_accel_sp_cand.map{ [ it[0], it[2] ] }.concat( name_fits_files ).groupTuple( size: 2 ).map{ [ it[0], it[1][0], it[1][1] ] }
+            inf_accel_sp_cand.map{ [ it[0], it[2] ] }.concat( name_fits_freq_dur ).groupTuple( size: 2 ).map{ [ it[0], it[1][0], it[1][1] ] }
         )
     emit:
         // [ pfd, bestprof, ps, png ]
