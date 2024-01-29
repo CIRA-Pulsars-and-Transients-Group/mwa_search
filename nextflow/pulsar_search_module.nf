@@ -81,8 +81,9 @@ process ddplan {
 
     if '${name}'.startswith('Blind'):
         output = dd_plan(${centre_freq}, 30.72, 3072, 0.1, ${params.dm_min}, ${params.dm_max},
-                         min_DM_step=${params.dm_min_step}, max_DM_step=${params.dm_max_step},
+                         min_dm_step=${params.dm_min_step}, max_dm_step=${params.dm_max_step},
                          max_dms_per_job=${params.max_dms_per_job})
+        print("Done getting DD plan")
     else:
         if '${name}'.startswith('dm_'):
             dm = float('${name}'.split('dm_')[-1].split('_')[0])
@@ -169,6 +170,7 @@ process ddplan {
             wf_sum = 0
 
         work_function_batch.append([dm_min, dm_max, dm_step, ndm, timeres, downsamp, nsub, total_work_factor])
+        print("Done setting up work function batch")
 
     # Write final file
     local_dm_steps = int(np.array(work_function_batch).sum(axis=0)[3])
