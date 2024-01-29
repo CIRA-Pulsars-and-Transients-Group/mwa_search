@@ -116,7 +116,7 @@ process ddplan {
         dm_min, dm_max, dm_step, ndm, timeres, downsamp, nsub, total_work_factor = dd_line
         while total_work_factor > ${params.max_work_function}:
             # Ouput a file with just the max_work_function worth of DMs
-            with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{wf_dm_step}.txt", "w") as outfile:
+            with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{dm_step}.txt", "w") as outfile:
                 spamwriter = csv.writer(outfile, delimiter=',')
                 spamwriter.writerow([
                     dm_min,
@@ -136,7 +136,7 @@ process ddplan {
         wf_sum += total_work_factor
         if wf_sum > ${params.max_work_function}:
             # Ouput file with multiple ddplan lines
-            local_dm_steps = int(wf_dm_step + np.array(work_function_batch).sum(axis=0)[3])
+            local_dm_steps = int(dm_step + np.array(work_function_batch).sum(axis=0)[3])
             with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{local_dm_steps}.txt", "w") as outfile:
                 spamwriter = csv.writer(outfile, delimiter=',')
                 for out_line in work_function_batch:
