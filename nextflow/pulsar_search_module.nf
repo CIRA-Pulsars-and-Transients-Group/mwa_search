@@ -6,6 +6,18 @@ max_freq = 1 / params.min_period
 min_f_harm = min_freq
 max_f_harm = max_freq * params.nharm
 
+// Set up presto dedispersion settings
+dedisp_options = " "
+if ( params.noweights ) {
+    dedisp_options = " -noweights " + dedisp_options
+}
+if ( params.noscales ) {
+    dedisp_options = " -noscales " + dedisp_options
+}
+if ( params.nooffsets ) {
+    dedisp_options = " -nooffsets " + dedisp_options
+}
+
 // Work out total obs time
 // if ( params.all ) {
 //     // an estimation since there's no easy way to make this work
@@ -177,12 +189,12 @@ process search_dd_fft_acc {
 
     time { search_time_estimate(dur, params.max_work_function) }
     memory { "${task.attempt * 30} GB"}
-    maxRetries 2
-    errorStrategy 'retry'
+    maxRetries 0
+    errorStrategy 'ignore'
     maxForks params.max_search_jobs
 
     input:
-    tuple val(obsid), val(name), path(fits_path), val(freq), val(dur), val(ndms_job), val(ddplans)
+    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(ndms_job), val(ddplans)
 
     output:
     tuple val(name), path("*ACCEL_${params.zmax}"), path("*.inf"), path("*.singlepulse"), path('*.cand')
@@ -197,22 +209,24 @@ process search_dd_fft_acc {
         # Split into each value
         IFS=, read -r dm_min dm_max dm_step ndm timeres downsamp nsub wf <<< \${ddplan}
         # Calculate the number of output data points
-        numout=\$(bc <<< "scale=0; ${dur} * 10000 + \${downsamp}")
+        numout=\$(bc <<< "scale=0; ${dur} * 10000 / \${downsamp}")
         numout=\$(printf "%.0f\n" "\${numout}")
         if (( \$numout % 2 != 0 )) ; then
             numout=\$(expr \$numout + 1)
         fi
         echo "Performing dedispersion with"
         echo "    dm_min: \${dm_min}, dm_max: \${dm_max}, dm_step: \${dm_step}"
-        echo "    ndm: \${ndm}, timeres: \${timeres}, downsamp: \${downsamp}, nsub: \${nsub},"
+        echo "    ndm: \${ndm}, timeres: \${timeres}, downsamp: \${downsamp}, nsub: \${nsub}, nout: \${numout}"
+        echo "    dedispersion options : ${dedisp_options},"
         prepsubband -ncpus ${task.cpus} -lodm \${dm_min} -dmstep \${dm_step} -numdms \${ndm} -zerodm -nsub \${nsub} \
--downsamp \${downsamp} -numout \${numout} -o ${name} ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
+-downsamp \${downsamp} -numout \${numout} ${dedisp_options} -o ${name} ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
     done
 
     printf "\\n#Performing the FFTs at \$(date +"%Y-%m-%d_%H:%m:%S") -----------------------------------------------------\\n"
-    realfft *dat
+    du -sh 
     printf "\\n#Performing the periodic search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
     for i in \$(ls *.dat); do
+        realfft \${i}
         # Somtimes this has a 255 error code when data.pow == 0 so ignore it
         accelsearch -ncpus ${task.cpus} -zmax ${params.zmax} -flo ${min_f_harm} -fhi ${max_f_harm} -numharm ${params.nharm} \${i%.dat}.fft || true
     done
@@ -404,7 +418,7 @@ workflow pulsar_search {
         search_dd_fft_acc(
             ddplan.out.transpose()
             .map { obsid, name, fits, freq, dur, ddplan ->
-                [ groupKey(obsid, name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
+                [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
             }
         )
         // Output format: [ name,  ACCEL_summary, presto_inf, single_pulse, periodic_candidates ]

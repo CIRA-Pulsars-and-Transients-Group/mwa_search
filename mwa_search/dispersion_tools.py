@@ -96,7 +96,7 @@ def dd_plan(
         highdm=500,
         smear_ref_freq_frac=0.2,
         nsub_ref_freq_frac=0.8,
-        smear_fact=3.,
+        smear_fact=2,
         nsub_smear_fact=2,
         min_dm_step=0.01,
         max_dm_step=500.0,
