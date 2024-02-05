@@ -57,6 +57,6 @@ workflow {
     }
     else {
         pulsar_search( [params.obsid, params.fits_dir] )
-        classifier( pulsar_search.out )
+        //classifier( pulsar_search.out )
     }
 }

@@ -147,6 +147,7 @@ def dd_plan(
         [[low_DM, high_DM, DM_step, nDM_step, timeres, downsample, nsub ]]
     """
 
+    print(centrefreq)
     DD_plan_array = []
     freqres = bandwidth / float(nfreqchan)
     previous_DM = lowdm

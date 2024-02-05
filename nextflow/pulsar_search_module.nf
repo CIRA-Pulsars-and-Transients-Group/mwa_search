@@ -55,6 +55,7 @@ process get_freq_and_dur {
     import csv
     import glob
     from astropy.io import fits
+    from mwa_search.metafits_utils import mdir
 
     # Read in fits file to read its header
     dur = 0
@@ -68,6 +69,8 @@ process get_freq_and_dur {
             freq = hdul[0].header['OBSFREQ']
         # Calculate the observation duration in seconds
         dur += hdul[1].header['NAXIS2'] * hdul[1].header['TBIN'] * hdul[1].header['NSBLK']
+
+    mdir("${params.out_dir}", "Output Directory", ${params.gid})
 
     # Export both values as a CSV for easy output
     with open("name_freq_dur.csv", "w") as outfile:
@@ -93,6 +96,7 @@ process ddplan {
 
     if '${name}'.startswith('Blind'):
         output = dd_plan(${centre_freq}, 30.72, 3072, 0.1, ${params.dm_min}, ${params.dm_max},
+                         0.2, 0.8, smear_fact=2, nsub_smear_fact=2,
                          min_dm_step=${params.dm_min_step}, max_dm_step=${params.dm_max_step},
                          max_dms_per_job=${params.max_dms_per_job})
     else:
@@ -174,11 +178,12 @@ process ddplan {
         work_function_batch.append([dm_min, dm_max, dm_step, ndm, timeres, downsamp, nsub, total_work_factor])
 
     # Write final file
-    local_dm_steps = int(np.array(work_function_batch).sum(axis=0)[3])
-    with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{local_dm_steps}.txt", "w") as outfile:
-        spamwriter = csv.writer(outfile, delimiter=',')
-        for out_line in work_function_batch:
-            spamwriter.writerow(out_line)
+    if work_function_batch:
+        local_dm_steps = int(np.array(work_function_batch).sum(axis=0)[3])
+        with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{local_dm_steps}.txt", "w") as outfile:
+            spamwriter = csv.writer(outfile, delimiter=',')
+            for out_line in work_function_batch:
+                spamwriter.writerow(out_line)
     """
 }
 
@@ -190,14 +195,15 @@ process search_dd_fft_acc {
     time { search_time_estimate(dur, params.max_work_function) }
     memory { "${task.attempt * 30} GB"}
     maxRetries 0
-    errorStrategy 'ignore'
+    errorStrategy 'terminate'
     maxForks params.max_search_jobs
+    publishDir params.out_dir, mode: 'copy'
 
     input:
     tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(ndms_job), val(ddplans)
 
     output:
-    tuple val(name), path("*ACCEL_${params.zmax}"), path("*.inf"), path("*.singlepulse"), path('*.cand')
+    tuple val(name), path("*ACCEL_${params.zmax}.tar"), path("*inf.tar"), path("*singlepulse.tar"), path('*cand.tar')
 
     """
     printf "\\n#Dedispersing the time series at \$(date +"%Y-%m-%d_%H:%m:%S") --------------------------------------------\\n"
@@ -234,6 +240,12 @@ process search_dd_fft_acc {
     printf "\\n#Performing the single pulse search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
     ${params.presto_python_load}
     single_pulse_search.py -p -m 0.5 -b *.dat
+    printf "\\n#Tar-ing up the data at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
+    tar -cvf ${name}_DM\${dm_max}_ACCEL_${params.zmax}.tar --force-local *ACCEL_${params.zmax}
+    tar -cvf ${name}_DM\${dm_max}_inf.tar --force-local *.inf
+    tar -cvf ${name}_DM\${dm_max}_singlepulse.tar --force-local *.singlepulse
+    tar -cvf ${name}_DM\${dm_max}_cand.tar --force-local *.cand
+    cp *.tar ${params.vcsdir}/${obsid}/pointings/${fits_dir}/
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%m:%S") ----------------------------------------------------------------\\n"
     """
 }
@@ -248,15 +260,24 @@ process accelsift {
     maxRetries 1
 
     input:
-    tuple val(name), path(accel), path(single_pulse), path(cands)
+    tuple val(name), path(accel), path(inf), path(single_pulse), path(cands)
 
     output:
-    tuple val(name), path(accel), path(single_pulse), path(cands), path("cands_*greped.txt")
+    tuple val(name), path(accel), path(inf), path(single_pulse), path(cands), path("cands_*greped.txt"), path("*candidates.tar")
 
     shell:
     '''
+    for f in !{accel}; do
+        tar -xvf ${f} --force-local
+    done
+    for f in !{inf}; do
+        tar -xvf ${f} --force-local
+    done
+    for f in !{cands}; do
+        tar -xvf ${f} --force-local
+    done
     # Remove incomplete or errored files
-    for i in !{accel}; do
+    for i in *ACCEL_!{params.zmax}; do
         if [ $(grep " Number of bins in the time series" $i | wc -l) == 0 ]; then
             rm ${i%%_ACCEL_}*
         fi
@@ -270,6 +291,10 @@ process accelsift {
         #No candidates so make an empty file
         touch cands_!{name}_greped.txt
     fi
+    printf "tar -cvf !{name}_candidates.tar " > tar_candidates.sh
+    cat cands_!{name}_greped.txt | awk -F"_ACCEL" '{printf $1"* "}' >> tar_candidates.sh
+    echo "--force-local" >> tar_candidates.sh
+    sh tar_candidates.sh
     '''
 }
 
@@ -284,7 +309,7 @@ process prepfold {
     maxRetries 1
 
     input:
-    tuple val(cand_lines), val(dur), path(cand_infs), path(cand_files), path(fits_files)
+    tuple val(cand_lines), val(obsid), val(dur), path(cand_tar), path(fits_dir)
 
     output:
     tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png")//, optional: true) // some PRESTO installs don't make pngs
@@ -300,6 +325,7 @@ process prepfold {
         IFS=, read -r name dm c3 c4 nharm period c7 c8 c9 c10 c11 <<< \${cand_line}
         fits_name=\${name%_DM*}
         fits_name=\${fits_name#*_}
+        tar -xvf ${cand_tar} --force-local --wildcards \${name%_ACCEL*}*
 
         # Set up the prepfold options to match the ML candidate profiler
         period=\$(echo "scale=8; \$period / 1000" | bc | awk '{printf "%.8f", \$0}')
@@ -323,7 +349,7 @@ process prepfold {
 
         prepfold -ncpus ${task.cpus} -o \$name  -accelfile \${name%:*}.cand -accelcand \${name##*:} \
     -n \$nbins -dm \$dm -noxwin -noclip -nsub 256 -npart \$ntimechunk -dmstep \$dmstep \
-    -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact -runavg \${fits_name}*.fits
+    -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact -runavg ${params.vcsdir}/${obsid}/pointings/${fits_dir}/\${fits_name}*.fits
 
     done
     """
@@ -386,16 +412,19 @@ process single_pulse_searcher {
     errorStrategy 'ignore'
 
     input:
-    tuple val(name), path(sps), path(fits)
+    tuple val(name), val(obsid), path(sps_tar), path(fits_dir)
 
     output:
     path "*pdf", optional: true
     path "*.SpS"
 
     """
+    for f in ${sps_tar}; do
+        tar -xvf \$f --force-local
+    done
     cat *.singlepulse > ${name}.SpS
     #-SNR_min 4 -SNR_peak_min 4.5 -DM_cand 1.5 -N_min 3
-    single_pulse_searcher.py -fits ${fits} -no_store -plot_name ${name}_sps.pdf ${name}.SpS
+    single_pulse_searcher.py -fits ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits -no_store -plot_name ${name}_sps.pdf ${name}.SpS
     """
 }
 
@@ -425,34 +454,28 @@ workflow pulsar_search {
 
         // Get all the inf, ACCEL and single pulse files and sort them into groups with the same name key
         // This uses the groupKey so it should output the channel as soon as it has all the DMs
-        inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel - null, sp, cands - null ] }
+        inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel, inf, sp, cands ] }
         accelsift( inf_accel_sp_cand )
 
         // For each line of each candidate file and treat it as a candidate
-        accel_cands = accelsift.out.flatMap{ it[-1].splitCsv() }.map{ it -> [it[0].split("_ACCEL")[0], it ] }
-        // Grab the inf and cand files for the key (name including DM)
-        inf_cands  = search_dd_fft_acc.out.map{ it[2] }.flatten().map{ [ it.baseName, it ] } // inf files
-            .concat( search_dd_fft_acc.out.map{ it[4] }.flatten().map{ [ it.baseName.split("_ACCEL")[0], it ] } ) // cand files
-            .groupTuple( size: 2 ).map{ [ it[0], it[1][0], it[1][1] ] } // grouping and reorganising
+        accel_cands = accelsift.out.flatMap{ it[-2].splitCsv() }.map{ it -> [it[0].split("_ACCEL")[0], it ] }
+        accel_tar = accelsift.out.map{ it[-1] } 
         // For each accel cand, pair it with its inf and cand files
-        accel_inf_cands = accel_cands.cross( inf_cands )
-            // Reorganise it so it's back to the just name key style
-            .map{ [ it[0][0].split("_DM")[0], it[0][1], it[1][1], it[1][2] ] }
+        accel_inf_cands = accel_cands.combine( accel_tar )
         // Pair them with fits files and metadata so they are ready to fold
-        cands_for_prepfold = name_fits_freq_dur.cross( accel_inf_cands )
-            .map{ [ it[1][1], Float.valueOf(it[0][3]), it[1][2], it[1][3], it[0][1] ] }
+        cands_for_prepfold = name_fits_freq_dur.combine( accel_inf_cands ).map{it -> [it[6], it[0], Float.valueOf(it[4]), it[-1], it[2]] }
             // collate by several prepfold jobs together
             .collate( params.max_folds_per_job )
             // reformat them to be in lists for each data type
             .transpose().collate( 5 )
-            .map { cand_lines, durs, cand_infs, cand_files, fits_files -> [ cand_lines, durs.sum(), cand_infs, cand_files, fits_files.unique() ]}
+            .map { cand_lines, obsid, durs, cand_tar, fits_dir -> [ cand_lines, obsid.unique()[0], durs.sum(), cand_tar.unique()[0], fits_dir.unique()[0] ]}
             // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
         prepfold( cands_for_prepfold )
 
         // Combined the grouped single pulse files with the fits files
-        single_pulse_searcher(
-            inf_accel_sp_cand.map{ [ it[0], it[2] ] }.concat( name_fits_freq_dur ).groupTuple( size: 2 ).map{ [ it[0], it[1][0], it[1][1] ] }
-        )
+        //single_pulse_searcher(
+        //    inf_accel_sp_cand.map{ [ it[0], it[3] ] }.combine( name_fits_freq_dur ).map{ [ it[3], it[2], it[1], it[4] ] }
+        //)
     emit:
         // [ pfd, bestprof, ps, png ]
         prepfold.out
