@@ -203,7 +203,7 @@ process search_dd_fft_acc {
     tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(ndms_job), val(ddplans)
 
     output:
-    tuple val(name), path("*ACCEL_${params.zmax}.tar"), path("*inf.tar"), path("*singlepulse.tar"), path('*cand.tar')
+    tuple val(name), path("*ACCEL_${params.zmax}.tar"), path("*inf.tar"), path("*singlepulse.tar"), path('*cand.tar'), path('*ffa.tar')
 
     """
     printf "\\n#Dedispersing the time series at \$(date +"%Y-%m-%d_%H:%m:%S") --------------------------------------------\\n"
@@ -235,6 +235,9 @@ process search_dd_fft_acc {
         realfft \${i}
         # Somtimes this has a 255 error code when data.pow == 0 so ignore it
         accelsearch -ncpus ${task.cpus} -zmax ${params.zmax} -flo ${min_f_harm} -fhi ${max_f_harm} -numharm ${params.nharm} \${i%.dat}.fft || true
+        if ${params.ffa}; then
+            rffa \${i%.dat}.inf -c ${params.ffa_config}
+        fi
     done
 
     printf "\\n#Performing the single pulse search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
@@ -245,7 +248,11 @@ process search_dd_fft_acc {
     tar -cvf ${name}_DM\${dm_max}_inf.tar --force-local *.inf
     tar -cvf ${name}_DM\${dm_max}_singlepulse.tar --force-local *.singlepulse
     tar -cvf ${name}_DM\${dm_max}_cand.tar --force-local *.cand
-    cp *.tar ${params.vcsdir}/${obsid}/pointings/${fits_dir}/
+    if ${params.ffa}; then
+        tar -cvf ${name}_DM\${dm_max}_ffa.tar --force-local peaks.csv candidates.csv clusters.csv
+    else
+        touch ${name}_DM\${dm_max}_ffa.tar
+    fi
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%m:%S") ----------------------------------------------------------------\\n"
     """
 }
@@ -454,7 +461,7 @@ workflow pulsar_search {
 
         // Get all the inf, ACCEL and single pulse files and sort them into groups with the same name key
         // This uses the groupKey so it should output the channel as soon as it has all the DMs
-        inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel, inf, sp, cands ] }
+        inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, ffa -> [ key.toString(), accel, inf, sp, cands ] }
         accelsift( inf_accel_sp_cand )
 
         // For each line of each candidate file and treat it as a candidate
