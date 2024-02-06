@@ -348,7 +348,7 @@ process prepfold {
         echo "ndmfact: \$ndmfact   ddm: \$ddm"
 
         prepfold -ncpus ${task.cpus} -o \$name  -accelfile \${name%:*}.cand -accelcand \${name##*:} \
-    -n \$nbins -dm \$dm -noxwin -noclip -nsub 256 -npart \$ntimechunk -dmstep \$dmstep \
+    -n \$nbins -dm \$dm -nosearch -noxwin -noclip -nsub 256 -npart \$ntimechunk -dmstep \$dmstep \
     -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact -runavg ${params.vcsdir}/${obsid}/pointings/${fits_dir}/\${fits_name}*.fits
 
     done
