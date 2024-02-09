@@ -14,6 +14,12 @@ else {
 }
 
 
+def vcsbeam_time(dur) {
+    full_time = (int) ( Float.valueOf(dur) * Float.valueOf(params.bf_time_per_sec) )
+    return "${full_time}s"
+}
+
+
 process beamform_setup {
     output:
     path "${params.obsid}_beg_end_dur.txt",  emit: beg_end_dur
@@ -109,7 +115,7 @@ process make_beam {
     label 'gpu'
     label 'vcsbeam'
 
-    time '6h' 
+    time { vcsbeam_time(dur) }
     errorStrategy 'ignore'
     maxRetries 0
     maxForks params.max_gpu_jobs
