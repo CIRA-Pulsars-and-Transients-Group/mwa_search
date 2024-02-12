@@ -203,7 +203,7 @@ process search_dd_fft_acc {
     tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(ndms_job), val(ddplans)
 
     output:
-    tuple val(name), path("*ACCEL_${params.zmax}.tar"), path("*inf.tar"), path("*singlepulse.tar"), path('*cand.tar'), path('*dat.tar')
+    tuple val(name), path("*ACCEL_${params.zmax}.tar"), path("*inf.tar"), path("*singlepulse.tar"), path('*cand.tar'), path('*ffa.tar')
 
     """
     printf "\\n#Dedispersing the time series at \$(date +"%Y-%m-%d_%H:%m:%S") --------------------------------------------\\n"
@@ -247,9 +247,18 @@ process search_dd_fft_acc {
     tar -cvf ${name}_DM\${dm_max}_cand.tar --force-local *.cand
 
     if ${params.ffa}; then
-        tar -cvf ${name}_DM\${dm_max}_dat.tar --force-local *.dat
+        for f in `cat ${params.ffa_dms}`; do
+            if [ -f ${name}_DM\${f}.inf ]; then
+                echo ${name}_DM\${f}.dat ${name}_DM\${f}.inf >> files_to_tar.sh
+            fi
+        if [ -f files_to_tar.sh ]; then
+            echo 'tar -cvf ${name}_DM\${dm_max}_ffa.tar --force-local' | cat - files_to_tar.sh > temp && mv temp files_to_tar.sh
+            sh files_to_tar.sh
+        else
+            touch ${name}_DM\${dm_max}_ffa.tar
+        fi
     else
-        touch ${name}_DM\${dm_max}_dat.tar
+        touch ${name}_DM\${dm_max}_ffa.tar
     fi
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%m:%S") ----------------------------------------------------------------\\n"
     """
@@ -264,17 +273,14 @@ process run_ffa {
     publishDir params.out_dir, mode: 'copy'
 
     input:
-    tuple val(name), path(inf), path(dat)
+    tuple val(name), path(ffa)
 
     output:
     tuple val(name), path("*peaks.csv"), path("*candidates.csv"), path("*clusters.csv")
 
     shell:
     '''
-    for f in !{inf}; do
-        tar -xvf ${f} --force-local
-    done
-    for f in !{dat}; do
+    for f in !{ffa}; do
         tar -xvf ${f} --force-local
     done
     rffa *.inf -c !{params.ffa_config}
@@ -497,7 +503,7 @@ workflow pulsar_search {
         inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, dat -> [ key.toString(), accel, inf, sp, cands ] }
         accelsift( inf_accel_sp_cand )
         if ( params.ffa ) {
-            ffa_input = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, dat -> [ key.toString(), inf, dat ] }
+            ffa_input = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, ffa -> [ key.toString(), ffa ] }
             run_ffa( ffa_input )
         }
 
