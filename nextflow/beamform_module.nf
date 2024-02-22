@@ -116,7 +116,7 @@ process make_beam {
     label 'vcsbeam'
 
     time { vcsbeam_time(dur) }
-    errorStrategy 'ignore'
+    errorStrategy 'terminate'
     maxRetries 0
     maxForks params.max_gpu_jobs
 
@@ -126,7 +126,8 @@ process make_beam {
     path(pointings)
 
     """
-    srun make_mwa_tied_array_beam -m ${params.vcsdir}/${params.obsid}/${params.obsid}.metafits \
+    srun make_mwa_tied_array_beam \
+        -m ${params.vcsdir}/${params.obsid}/${params.obsid}.metafits \
         -b ${begin} \
         -T ${dur} \
         -f ${channel_id} \

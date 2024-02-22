@@ -96,7 +96,7 @@ process ddplan {
 
     if '${name}'.startswith('Blind'):
         output = dd_plan(${centre_freq}, 30.72, 3072, 0.1, ${params.dm_min}, ${params.dm_max},
-                         0.2, 0.8, smear_fact=2, nsub_smear_fact=2,
+                         0.2, 0.8, smear_fact=3, nsub_smear_fact=3,
                          min_dm_step=${params.dm_min_step}, max_dm_step=${params.dm_max_step},
                          max_dms_per_job=${params.max_dms_per_job})
     else:
@@ -188,19 +188,43 @@ process ddplan {
 }
 
 
+process rfifind {
+    label 'cpu'
+    label 'presto_rfifind'
+
+    time '4h'
+    memory '16 GB'
+
+    input:
+    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur)
+
+    output:
+    tuple val(obsid), path("*rfifind.mask"), path("*rfifind.stats")
+
+    """
+    if ${params.rfifind}; then
+        rfifind -blocks 16 -o ${name} ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
+    else
+        touch ${name}_rfifind.mask
+        touch ${name}_rfifind.stats
+    fi
+    """
+} 
+    
+
 process search_dd_fft_acc {
     label 'cpu'
     label 'presto_search'
 
     time { search_time_estimate(dur, params.max_work_function) }
     memory { "${task.attempt * 30} GB"}
-    maxRetries 0
+    maxRetries 1
     errorStrategy 'terminate'
     maxForks params.max_search_jobs
     publishDir params.out_dir, mode: 'copy'
 
     input:
-    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(ndms_job), val(ddplans)
+    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(ndms_job), val(ddplans), path(rfifind_mask), path(rfifind_stats)
 
     output:
     tuple val(name), path("*ACCEL_${params.zmax}.tar"), path("*inf.tar"), path("*singlepulse.tar"), path('*cand.tar'), path('*ffa.tar')
@@ -220,16 +244,21 @@ process search_dd_fft_acc {
         if (( \$numout % 2 != 0 )) ; then
             numout=\$(expr \$numout + 1)
         fi
+        if ${params.rfifind}; then
+            rfifind_command="-mask ${name}_rfifind.mask"
+        else
+            rfifind_command=""
+        fi 
         echo "Performing dedispersion with"
         echo "    dm_min: \${dm_min}, dm_max: \${dm_max}, dm_step: \${dm_step}"
         echo "    ndm: \${ndm}, timeres: \${timeres}, downsamp: \${downsamp}, nsub: \${nsub}, nout: \${numout}"
         echo "    dedispersion options : ${dedisp_options},"
-        prepsubband -ncpus ${task.cpus} -lodm \${dm_min} -dmstep \${dm_step} -numdms \${ndm} -zerodm -nsub \${nsub} \
--downsamp \${downsamp} -numout \${numout} ${dedisp_options} -o ${name} ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
+        prepsubband -ncpus ${task.cpus} -lodm \${dm_min} -dmstep \${dm_step} -numdms \${ndm} -nsub \${nsub} \
+-downsamp \${downsamp} -numout \${numout} ${dedisp_options} -o ${name} \${rfifind_command} \
+${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
     done
 
     printf "\\n#Performing the FFTs at \$(date +"%Y-%m-%d_%H:%m:%S") -----------------------------------------------------\\n"
-    du -sh 
     printf "\\n#Performing the periodic search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
     for i in \$(ls *.dat); do
         realfft \${i}
@@ -246,19 +275,13 @@ process search_dd_fft_acc {
     tar -cvf ${name}_DM\${dm_max}_singlepulse.tar --force-local *.singlepulse
     tar -cvf ${name}_DM\${dm_max}_cand.tar --force-local *.cand
 
+    tar -cf ${name}_DM\${dm_max}_ffa.tar --force-local -T /dev/null
     if ${params.ffa}; then
         for f in `cat ${params.ffa_dms}`; do
             if [ -f ${name}_DM\${f}.inf ]; then
-                echo ${name}_DM\${f}.dat ${name}_DM\${f}.inf >> files_to_tar.sh
+                tar -rvf ${name}_DM\${dm_max}_ffa.tar --force-local ${name}_DM\${f}.dat ${name}_DM\${f}.inf
             fi
-        if [ -f files_to_tar.sh ]; then
-            echo 'tar -cvf ${name}_DM\${dm_max}_ffa.tar --force-local' | cat - files_to_tar.sh > temp && mv temp files_to_tar.sh
-            sh files_to_tar.sh
-        else
-            touch ${name}_DM\${dm_max}_ffa.tar
-        fi
-    else
-        touch ${name}_DM\${dm_max}_ffa.tar
+        done
     fi
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%m:%S") ----------------------------------------------------------------\\n"
     """
@@ -270,13 +293,14 @@ process run_ffa {
     label 'cpu'
 
     time '6h'
+    memory '32 GB'
     publishDir params.out_dir, mode: 'copy'
 
     input:
     tuple val(name), path(ffa)
 
     output:
-    tuple val(name), path("*peaks.csv"), path("*candidates.csv"), path("*clusters.csv")
+    tuple val(name), path("*peaks.csv"), path("*clusters.csv"), path("candidate_*.*")
 
     shell:
     '''
@@ -287,8 +311,8 @@ process run_ffa {
     if [ ! -f peaks.csv ]; then
         touch peaks.csv
     fi
-    if [ ! -f candidates.csv ]; then
-        touch candidates.csv
+    if [ ! -f candidate_0000.json ]; then
+        touch candidate_0000.json
     fi
     if [ ! -f clusters.csv ]; then
         touch clusters.csv
@@ -301,7 +325,8 @@ process accelsift {
     label 'cpu'
     label 'presto'
 
-    time '25m'
+    time '2h'
+    memory '4 GB'
     errorStrategy 'retry'
     maxRetries 1
 
@@ -351,11 +376,12 @@ process prepfold {
 
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_prepfold
     time "${ (int) ( params.prepfold_scale * dur ) }s"
+    memory '4 GB'
     errorStrategy 'retry'
     maxRetries 1
 
     input:
-    tuple val(cand_lines), val(obsid), val(dur), path(cand_tar), path(fits_dir)
+    tuple val(cand_lines), val(obsid), val(dur), path(cand_tar), path(fits_dir), path(rfifind_mask), path(rfifind_stats)
 
     output:
     tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png")//, optional: true) // some PRESTO installs don't make pngs
@@ -371,7 +397,8 @@ process prepfold {
         IFS=, read -r name dm c3 c4 nharm period c7 c8 c9 c10 c11 <<< \${cand_line}
         fits_name=\${name%_DM*}
         fits_name=\${fits_name#*_}
-        tar -xvf ${cand_tar} --force-local --wildcards \${name%_ACCEL*}*
+        tar -xvf ${cand_tar} --force-local --wildcards \${name%_ACCEL*}*.inf
+        tar -xvf ${cand_tar} --force-local --wildcards \${name%_ACCEL*}*.cand
 
         # Set up the prepfold options to match the ML candidate profiler
         period=\$(echo "scale=8; \$period / 1000" | bc | awk '{printf "%.8f", \$0}')
@@ -393,9 +420,15 @@ process prepfold {
         ndmfact=\$(echo "1 + 1/(\$ddm*\$nbins)" | bc)
         echo "ndmfact: \$ndmfact   ddm: \$ddm"
 
+        if ${params.rfifind}; then
+            rfifind_command="-mask *_rfifind.mask"
+        else
+            rfifind_command=""
+        fi
+
         prepfold -ncpus ${task.cpus} -o \$name  -accelfile \${name%:*}.cand -accelcand \${name##*:} \
     -n \$nbins -dm \$dm -nosearch -noxwin -noclip -nsub 256 -npart \$ntimechunk -dmstep \$dmstep \
-    -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact -runavg ${params.vcsdir}/${obsid}/pointings/${fits_dir}/\${fits_name}*.fits
+    -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact \${rfifind_command} ${dedisp_options} ${params.vcsdir}/${obsid}/pointings/${fits_dir}/\${fits_name}*.fits
 
     done
     """
@@ -484,17 +517,19 @@ workflow pulsar_search {
 
         // Grab the meta data out of the CSV
         name_fits_freq_dur = get_freq_and_dur.out.map { obsid, fits, meta -> [ obsid, meta.splitCsv()[0][0], fits, meta.splitCsv()[0][1], meta.splitCsv()[0][2] ] }
+        name_fits_freq_dur.view()
         ddplan( name_fits_freq_dur )
         // ddplan's output format is [ name, fits_file, centrefreq(MHz), duration(s), DDplan_file ]
 
         // Trasponse to get a DM plan file each row/job then split the csv to get the DDplan
         // Also using groupKey so that future groupTuple will have the size of the total number of DMs
         // The DDplan file has the name format DDplan_{i}_a{total_dm_steps}_n{local_dm_steps}.txt
+        rfifind( name_fits_freq_dur )
         search_dd_fft_acc(
             ddplan.out.transpose()
             .map { obsid, name, fits, freq, dur, ddplan ->
                 [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
-            }
+            }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
         )
         // Output format: [ name,  ACCEL_summary, presto_inf, single_pulse, periodic_candidates ]
 
@@ -519,6 +554,7 @@ workflow pulsar_search {
             // reformat them to be in lists for each data type
             .transpose().collate( 5 )
             .map { cand_lines, obsid, durs, cand_tar, fits_dir -> [ cand_lines, obsid.unique()[0], durs.sum(), cand_tar.unique()[0], fits_dir.unique()[0] ]}
+            .combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
             // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
         prepfold( cands_for_prepfold )
 
