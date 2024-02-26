@@ -98,7 +98,7 @@ process ddplan {
         output = dd_plan(${centre_freq}, 30.72, 3072, 0.1, ${params.dm_min}, ${params.dm_max},
                          0.2, 0.8, smear_fact=3, nsub_smear_fact=3,
                          min_dm_step=${params.dm_min_step}, max_dm_step=${params.dm_max_step},
-                         max_dms_per_job=${params.max_dms_per_job})
+                         max_dms_per_job=${params.max_dms_per_job}, max_nsub=384)
     else:
         if '${name}'.startswith('dm_'):
             dm = float('${name}'.split('dm_')[-1].split('_')[0])
@@ -219,7 +219,7 @@ process search_dd_fft_acc {
     time { search_time_estimate(dur, params.max_work_function) }
     memory { "${task.attempt * 30} GB"}
     maxRetries 1
-    errorStrategy 'terminate'
+    errorStrategy 'retry'
     maxForks params.max_search_jobs
     publishDir params.out_dir, mode: 'copy'
 
@@ -262,6 +262,11 @@ ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
     printf "\\n#Performing the periodic search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
     for i in \$(ls *.dat); do
         realfft \${i}
+        if ${params.rednoise}; then
+            rednoise \${i%.dat}.fft
+            mv \${i%.dat}_red.fft \${i%.dat}.fft
+            mv \${i%.dat}_red.inf \${i%.dat}.inf
+        fi
         # Somtimes this has a 255 error code when data.pow == 0 so ignore it
         accelsearch -ncpus ${task.cpus} -zmax ${params.zmax} -flo ${min_f_harm} -fhi ${max_f_harm} -numharm ${params.nharm} \${i%.dat}.fft || true
     done

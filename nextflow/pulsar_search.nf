@@ -23,6 +23,8 @@ if ( params.help ) {
              |              [default: ${params.max_dms_per_job}]
              |
              |Pulsar search arguments (optional):
+             |  --rfifind   Whether to run rfifind on the data [default: params.rfifind]
+             |  --rednoise  Whether to run rednoise removal on the data [default: params.rednoise]
              |  --sp        Perform only a single pulse search [default: ${params.sp }]
              |  --cand      Label given to output files [default: ${params.cand }]
              |  --nharm     Number of harmonics to search [default: ${params.nharm }]

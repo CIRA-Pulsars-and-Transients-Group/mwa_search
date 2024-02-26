@@ -101,6 +101,7 @@ def dd_plan(
         min_dm_step=0.01,
         max_dm_step=500.0,
         max_dms_per_job=288,
+        max_nsub=3072,
 ):
     """
     Work out the dedisperion plan
@@ -220,7 +221,8 @@ def dd_plan(
                 previous_DM,
                 D_DM,
                 timeres * downsample,
-                nsub_smear_fact
+                nsub_smear_fact,
+                max_nsub=max_nsub
             )
             # if downsample > 16:
             #    DD_plan_array.append([ previous_DM, D_DM, DM_step, nDM_step, timeres, 16, nsub, total_work_factor ])
@@ -255,7 +257,8 @@ def dd_plan(
                 new_dm_min,
                 new_dm_min + dm_step * n_jobs,
                 timeres,
-                nsub_smear_fact
+                nsub_smear_fact,
+                max_nsub=max_nsub
             )
             new_dd_lines.append([
                 new_dm_min,
