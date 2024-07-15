@@ -217,7 +217,7 @@ process search_dd_fft_acc {
     label 'presto_search'
 
     time { search_time_estimate(dur, params.max_work_function) }
-    memory { "${task.attempt * 30} GB"}
+    memory { "${task.attempt * 4} GB"}
     maxRetries 1
     errorStrategy 'retry'
     maxForks params.max_search_jobs
@@ -280,14 +280,20 @@ ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
     tar -cvf ${name}_DM\${dm_max}_singlepulse.tar --force-local *.singlepulse
     tar -cvf ${name}_DM\${dm_max}_cand.tar --force-local *.cand
 
-    tar -cf ${name}_DM\${dm_max}_ffa.tar --force-local -T /dev/null
     if ${params.ffa}; then
         for f in `cat ${params.ffa_dms}`; do
             if [ -f ${name}_DM\${f}.inf ]; then
-                tar -rvf ${name}_DM\${dm_max}_ffa.tar --force-local ${name}_DM\${f}.dat ${name}_DM\${f}.inf
+                echo ${name}_DM\${f}.dat >> files_to_tar.txt
+                echo ${name}_DM\${f}.inf >> files_to_tar.txt
             fi
         done
+        if [ -f files_to_tar.txt ]; then
+            tar -cvf ${name}_DM\${dm_max}_ffa.tar --force-local -T files_to_tar.txt
+        fi
     fi
+    if [ ! -f ${name}_DM\${dm_max}_ffa.tar ]; then
+        tar -cvf ${name}_DM\${dm_max}_ffa.tar --force-local -T /dev/null
+    fi 
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%m:%S") ----------------------------------------------------------------\\n"
     """
 }

@@ -212,6 +212,8 @@ def dd_plan(
         if nDM_step % 2 != 0:
             nDM_step -= 1
         total_work_factor = nDM_step / downsample
+        D_DM = previous_DM + (nDM_step * DM_step)
+        D_DM = round(D_DM, 2)
         if D_DM > lowdm:
             nsub = calc_nsub(
                 centrefreq,
