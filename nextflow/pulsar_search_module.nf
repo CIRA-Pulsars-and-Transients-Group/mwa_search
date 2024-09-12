@@ -193,7 +193,7 @@ process rfifind {
     label 'presto_rfifind'
 
     time '4h'
-    memory '16 GB'
+    memory '4 GB'
 
     input:
     tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur)
@@ -217,7 +217,7 @@ process search_dd_fft_acc {
     label 'presto_search'
 
     time { search_time_estimate(dur, params.max_work_function) }
-    memory { "${task.attempt * 4} GB"}
+    memory { "${task.attempt * 2} GB"}
     maxRetries 1
     errorStrategy 'retry'
     maxForks params.max_search_jobs
@@ -304,7 +304,7 @@ process run_ffa {
     label 'cpu'
 
     time '6h'
-    memory '32 GB'
+    memory '16 GB'
     publishDir params.out_dir, mode: 'copy'
 
     input:
@@ -336,8 +336,8 @@ process accelsift {
     label 'cpu'
     label 'presto'
 
-    time '2h'
-    memory '4 GB'
+    time '20m'
+    memory '2 GB'
     errorStrategy 'retry'
     maxRetries 1
 
@@ -387,7 +387,7 @@ process prepfold {
 
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_prepfold
     time "${ (int) ( params.prepfold_scale * dur ) }s"
-    memory '4 GB'
+    memory '2 GB'
     errorStrategy 'retry'
     maxRetries 1
 
