@@ -275,10 +275,10 @@ ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
     ${params.presto_python_load}
     single_pulse_search.py -p -m 0.5 -b *.dat
     printf "\\n#Tar-ing up the data at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
-    tar -cvf ${name}_DM\${dm_max}_ACCEL_${params.zmax}.tar --force-local *ACCEL_${params.zmax}
-    tar -cvf ${name}_DM\${dm_max}_inf.tar --force-local *.inf
-    tar -cvf ${name}_DM\${dm_max}_singlepulse.tar --force-local *.singlepulse
-    tar -cvf ${name}_DM\${dm_max}_cand.tar --force-local *.cand
+    tar -cf ${name}_DM\${dm_max}_ACCEL_${params.zmax}.tar --force-local *ACCEL_${params.zmax}
+    tar -cf ${name}_DM\${dm_max}_inf.tar --force-local *.inf
+    tar -cf ${name}_DM\${dm_max}_singlepulse.tar --force-local *.singlepulse
+    tar -cf ${name}_DM\${dm_max}_cand.tar --force-local *.cand
 
     if ${params.ffa}; then
         for f in `cat ${params.ffa_dms}`; do
@@ -288,11 +288,11 @@ ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
             fi
         done
         if [ -f files_to_tar.txt ]; then
-            tar -cvf ${name}_DM\${dm_max}_ffa.tar --force-local -T files_to_tar.txt
+            tar -cf ${name}_DM\${dm_max}_ffa.tar --force-local -T files_to_tar.txt
         fi
     fi
     if [ ! -f ${name}_DM\${dm_max}_ffa.tar ]; then
-        tar -cvf ${name}_DM\${dm_max}_ffa.tar --force-local -T /dev/null
+        tar -cf ${name}_DM\${dm_max}_ffa.tar --force-local -T /dev/null
     fi 
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%m:%S") ----------------------------------------------------------------\\n"
     """
@@ -303,8 +303,10 @@ process run_ffa {
     label 'ffa'
     label 'cpu'
 
-    time '6h'
-    memory '16 GB'
+    time '8h'
+    memory '32 GB'
+    maxRetries 1
+    errorStrategy 'retry'
     publishDir params.out_dir, mode: 'copy'
 
     input:
@@ -316,7 +318,7 @@ process run_ffa {
     shell:
     '''
     for f in !{ffa}; do
-        tar -xvf ${f} --force-local
+        tar -xf ${f} --force-local
     done
     rffa *.inf -c !{params.ffa_config}
     if [ ! -f peaks.csv ]; then
@@ -387,7 +389,7 @@ process prepfold {
 
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_prepfold
     time "${ (int) ( params.prepfold_scale * dur ) }s"
-    memory '2 GB'
+    memory '3 GB'
     errorStrategy 'retry'
     maxRetries 1
 
