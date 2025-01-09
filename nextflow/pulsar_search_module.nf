@@ -91,7 +91,6 @@ process ddplan {
 
     import csv
     import numpy as np
-    from vcstools.catalogue_utils import grab_source_alog
     from mwa_search.dispersion_tools import dd_plan
 
     if '${name}'.startswith('Blind'):
@@ -100,24 +99,10 @@ process ddplan {
                          min_dm_step=${params.dm_min_step}, max_dm_step=${params.dm_max_step},
                          max_dms_per_job=${params.max_dms_per_job}, max_nsub=384)
     else:
-        if '${name}'.startswith('dm_'):
-            dm = float('${name}'.split('dm_')[-1].split('_')[0])
-        elif '${name}'.startswith('FRB'):
-            dm = grab_source_alog(source_type='FRB',
-                 pulsar_list=['${name}'], include_dm=True)[0][-1]
-        else:
-            # Try RRAT first
-            rrat_temp = grab_source_alog(source_type='RRATs',
-                        pulsar_list=['${name}'.split("_")[0]], include_dm=True)
-            if len(rrat_temp) == 0:
-                #No RRAT so must be pulsar
-                dm = grab_source_alog(source_type='Pulsar',
-                     pulsar_list=['${name}'.split("_")[0]], include_dm=True)[0][-1]
-            else:
-                dm = rrat_temp[0][-1]
+        dm = float('${name}'.split('dm_')[-1].split('_')[0])
         dm_min = float(dm) - 2.0
-        if dm_min < 1.0:
-            dm_min = 1.0
+        if dm_min < 0.0:
+            dm_min = 0.0
         dm_max = float(dm) + 2.0
         output = dd_plan(${centre_freq}, 30.72, 3072, 0.1, dm_min, dm_max,
                          min_DM_step=${params.dm_min_step}, max_DM_step=${params.dm_max_step},
