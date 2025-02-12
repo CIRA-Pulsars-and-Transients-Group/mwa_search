@@ -42,6 +42,8 @@ def search_time_estimate(dur, ndm) {
 }
 
 process get_freq_and_dur {
+    label 'python'    
+
     input:
     tuple val(obsid), path(fits_dir)
 
@@ -80,6 +82,8 @@ process get_freq_and_dur {
 }
 
 process ddplan {
+    label 'python'
+
     input:
     tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur)
 
@@ -202,7 +206,7 @@ process search_dd_fft_acc {
     label 'presto_search'
 
     time { search_time_estimate(dur, params.max_work_function) }
-    memory { "${task.attempt * 2} GB"}
+    memory { "${task.attempt * 1.75} GB"}
     maxRetries 1
     errorStrategy 'retry'
     maxForks params.max_search_jobs
@@ -258,7 +262,8 @@ ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
 
     printf "\\n#Performing the single pulse search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
     ${params.presto_python_load}
-    single_pulse_search.py -p -m 0.5 -b *.dat
+    single_pulse_search.py -p -m 0.5 -b *.dat 
+    
     printf "\\n#Tar-ing up the data at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
     tar -cf ${name}_DM\${dm_max}_ACCEL_${params.zmax}.tar --force-local *ACCEL_${params.zmax}
     tar -cf ${name}_DM\${dm_max}_inf.tar --force-local *.inf
@@ -289,7 +294,7 @@ process run_ffa {
     label 'cpu'
 
     time '8h'
-    memory '32 GB'
+    memory '28 GB'
     maxRetries 1
     errorStrategy 'retry'
     publishDir params.out_dir, mode: 'copy'
@@ -303,7 +308,8 @@ process run_ffa {
     shell:
     '''
     for f in !{ffa}; do
-        tar -xf ${f} --force-local
+        echo ${f}
+        tar -xvf ${f} --force-local
     done
     rffa *.inf -c !{params.ffa_config}
     if [ ! -f peaks.csv ]; then
@@ -321,10 +327,11 @@ process run_ffa {
 
 process accelsift {
     label 'cpu'
+    label 'python'
     label 'presto'
 
     time '20m'
-    memory '2 GB'
+    memory '1.75 GB'
     errorStrategy 'retry'
     maxRetries 1
 
@@ -352,7 +359,11 @@ process accelsift {
         fi
     done
 
-    ACCEL_sift.py --file_name !{name}
+    !{params.accel_sift_cmd} --file_name !{name}
+    if [ ! -f cands_!{name}.txt ]; then
+        # read from STDOUT if --file_name does not work
+        !{params.accel_sift_cmd} > cands_!{name}.txt
+    fi
     if [ -f cands_!{name}.txt ]; then
         # Get candidate lines and replace space with a comma
         grep !{name} cands_!{name}.txt | tr -s '[:space:]' | sed -e 's/ /,/g' > cands_!{name}_greped.txt
@@ -370,7 +381,7 @@ process accelsift {
 
 process prepfold {
     label 'cpu'
-    label 'presto'
+    label 'presto_search'
 
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_prepfold
     time "${ (int) ( params.prepfold_scale * dur ) }s"
