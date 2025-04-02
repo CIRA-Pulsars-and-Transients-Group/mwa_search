@@ -69,6 +69,7 @@ process get_freq_and_dur {
             name = f"${params.cand}_{fits_file.split('/')[-1].split('_ch')[0]}"
             # Grab the centre frequency in MHz
             freq = hdul[0].header['OBSFREQ']
+            nchan = hdul[0].header['OBSNCHAN']
         # Calculate the observation duration in seconds
         dur += hdul[1].header['NAXIS2'] * hdul[1].header['TBIN'] * hdul[1].header['NSBLK']
 
@@ -77,7 +78,7 @@ process get_freq_and_dur {
     # Export both values as a CSV for easy output
     with open("name_freq_dur.csv", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
-        spamwriter.writerow([name, freq, dur])
+        spamwriter.writerow([name, freq, dur, nchan])
     """
 }
 
@@ -85,7 +86,7 @@ process ddplan {
     label 'python'
 
     input:
-    tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur)
+    tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur), val(nchan)
 
     output:
     tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur), path('DDplan*.txt')
@@ -98,7 +99,7 @@ process ddplan {
     from mwa_search.dispersion_tools import dd_plan
 
     if '${name}'.startswith('Blind'):
-        output = dd_plan(${centre_freq}, 30.72, 3072, 0.1, ${params.dm_min}, ${params.dm_max},
+        output = dd_plan(${centre_freq}, ${nchan} / 100, ${nchan}, 0.1, ${params.dm_min}, ${params.dm_max},
                          0.2, 0.8, smear_fact=3, nsub_smear_fact=3,
                          min_dm_step=${params.dm_min_step}, max_dm_step=${params.dm_max_step},
                          max_dms_per_job=${params.max_dms_per_job}, max_nsub=384)
@@ -108,7 +109,7 @@ process ddplan {
         if dm_min < 0.0:
             dm_min = 0.0
         dm_max = float(dm) + 2.0
-        output = dd_plan(${centre_freq}, 30.72, 3072, 0.1, dm_min, dm_max,
+        output = dd_plan(${centre_freq}, ${nchan} / 100, ${nchan}, 0.1, dm_min, dm_max,
                          min_DM_step=${params.dm_min_step}, max_DM_step=${params.dm_max_step},
                          max_dms_per_job=${params.max_dms_per_job})
 
@@ -182,10 +183,10 @@ process rfifind {
     label 'presto_rfifind'
 
     time '4h'
-    memory '4 GB'
+    memory '3680 MB'
 
     input:
-    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur)
+    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(nchan)
 
     output:
     tuple val(obsid), path("*rfifind.mask"), path("*rfifind.stats")
@@ -206,7 +207,7 @@ process search_dd_fft_acc {
     label 'presto_search'
 
     time { search_time_estimate(dur, params.max_work_function) }
-    memory { "${task.attempt * 1.75} GB"}
+    memory { "${task.attempt * 1840} MB"}
     maxRetries 1
     errorStrategy 'retry'
     maxForks params.max_search_jobs
@@ -247,29 +248,7 @@ process search_dd_fft_acc {
 ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
     done
 
-    printf "\\n#Performing the FFTs at \$(date +"%Y-%m-%d_%H:%m:%S") -----------------------------------------------------\\n"
-    printf "\\n#Performing the periodic search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
-    for i in \$(ls *.dat); do
-        realfft \${i}
-        if ${params.rednoise}; then
-            rednoise \${i%.dat}.fft
-            mv \${i%.dat}_red.fft \${i%.dat}.fft
-            mv \${i%.dat}_red.inf \${i%.dat}.inf
-        fi
-        # Somtimes this has a 255 error code when data.pow == 0 so ignore it
-        accelsearch -ncpus ${task.cpus} -zmax ${params.zmax} -flo ${min_f_harm} -fhi ${max_f_harm} -numharm ${params.nharm} \${i%.dat}.fft || true
-    done
-
-    printf "\\n#Performing the single pulse search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
-    ${params.presto_python_load}
-    single_pulse_search.py -p -m 0.5 -b *.dat 
-    
-    printf "\\n#Tar-ing up the data at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
-    tar -cf ${name}_DM\${dm_max}_ACCEL_${params.zmax}.tar --force-local *ACCEL_${params.zmax}
-    tar -cf ${name}_DM\${dm_max}_inf.tar --force-local *.inf
-    tar -cf ${name}_DM\${dm_max}_singlepulse.tar --force-local *.singlepulse
-    tar -cf ${name}_DM\${dm_max}_cand.tar --force-local *.cand
-
+    printf "\\n#Tar-ing up the required .dat files at \$(date +"%Y-%m-%d_%H:%m:%S") --------------------------------------\\n"
     if ${params.ffa}; then
         for f in `cat ${params.ffa_dms}`; do
             if [ -f ${name}_DM\${f}.inf ]; then
@@ -283,7 +262,40 @@ ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
     fi
     if [ ! -f ${name}_DM\${dm_max}_ffa.tar ]; then
         tar -cf ${name}_DM\${dm_max}_ffa.tar --force-local -T /dev/null
+    fi
+
+    printf "\\n#Performing the FFTs at \$(date +"%Y-%m-%d_%H:%m:%S") -----------------------------------------------------\\n"
+    printf "\\n#Performing the periodic search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
+    for i in \$(ls *.dat); do
+        realfft \${i}
+        if ${params.rednoise}; then
+            rednoise \${i%.dat}.fft
+            mv \${i%.dat}_red.fft \${i%.dat}.fft
+            mv \${i%.dat}_red.inf \${i%.dat}.inf
+        fi
+        # Somtimes this has a 255 error code when data.pow == 0 so ignore it
+        accelsearch -ncpus ${task.cpus} -zmax ${params.zmax} -flo ${min_f_harm} -fhi ${max_f_harm} -numharm ${params.nharm} \${i%.dat}.fft || true
+        if ${params.delete_files}; then
+            rm \${i%.dat}.fft
+        fi
+    done
+
+    printf "\\n#Performing the single pulse search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
+    ${params.presto_python_load}
+    single_pulse_search.py -p -m 0.5 -b *.dat
+    if ${params.delete_files}; then
+        rm *.dat
     fi 
+    
+    printf "\\n#Tar-ing up the data at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
+    tar -cf ${name}_DM\${dm_max}_ACCEL_${params.zmax}.tar --force-local *ACCEL_${params.zmax}
+    tar -cf ${name}_DM\${dm_max}_inf.tar --force-local *.inf
+    tar -cf ${name}_DM\${dm_max}_singlepulse.tar --force-local *.singlepulse
+    tar -cf ${name}_DM\${dm_max}_cand.tar --force-local *.cand
+    if ${params.delete_files}; then
+        rm *ACCEL_${params.zmax} *.inf *.singlepulse *.cand *.txtcand
+    fi
+
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%m:%S") ----------------------------------------------------------------\\n"
     """
 }
@@ -321,6 +333,9 @@ process run_ffa {
     if [ ! -f clusters.csv ]; then
         touch clusters.csv
     fi
+    if !{params.delete_files}; then
+        rm *.dat *.inf
+    fi
     '''
 }
 
@@ -330,7 +345,7 @@ process accelsift {
     label 'python'
     label 'presto'
 
-    time '20m'
+    time '1h'
     memory '1.75 GB'
     errorStrategy 'retry'
     maxRetries 1
@@ -375,6 +390,9 @@ process accelsift {
     cat cands_!{name}_greped.txt | awk -F"_ACCEL" '{printf $1"* "}' >> tar_candidates.sh
     echo "--force-local" >> tar_candidates.sh
     sh tar_candidates.sh
+    if !{params.delete_files}; then
+        rm *ACCEL_!{params.zmax} *.inf *.cand
+    fi
     '''
 }
 
@@ -525,7 +543,7 @@ workflow pulsar_search {
         get_freq_and_dur( name_fits_files ) // [ name, fits_file, freq, dur ]
 
         // Grab the meta data out of the CSV
-        name_fits_freq_dur = get_freq_and_dur.out.map { obsid, fits, meta -> [ obsid, meta.splitCsv()[0][0], fits, meta.splitCsv()[0][1], meta.splitCsv()[0][2] ] }
+        name_fits_freq_dur = get_freq_and_dur.out.map { obsid, fits, meta -> [ obsid, meta.splitCsv()[0][0], fits, meta.splitCsv()[0][1], meta.splitCsv()[0][2], meta.splitCsv()[0][3] ] }
         name_fits_freq_dur.view()
         ddplan( name_fits_freq_dur )
         // ddplan's output format is [ name, fits_file, centrefreq(MHz), duration(s), DDplan_file ]
@@ -557,7 +575,7 @@ workflow pulsar_search {
         // For each accel cand, pair it with its inf and cand files
         accel_inf_cands = accel_cands.combine( accel_tar )
         // Pair them with fits files and metadata so they are ready to fold
-        cands_for_prepfold = name_fits_freq_dur.combine( accel_inf_cands ).map{it -> [it[6], it[0], Float.valueOf(it[4]), it[-1], it[2]] }
+        cands_for_prepfold = name_fits_freq_dur.combine( accel_inf_cands ).map{it -> [it[7], it[0], Float.valueOf(it[4]), it[-1], it[2]] }
             // collate by several prepfold jobs together
             .collate( params.max_folds_per_job )
             // reformat them to be in lists for each data type

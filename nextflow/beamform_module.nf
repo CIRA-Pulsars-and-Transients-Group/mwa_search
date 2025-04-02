@@ -21,6 +21,8 @@ def vcsbeam_time(dur) {
 
 
 process beamform_setup {
+    label 'python'
+
     output:
     path "${params.obsid}_beg_end_dur.txt",  emit: beg_end_dur
     path "${params.obsid}_channels.txt", emit: channels

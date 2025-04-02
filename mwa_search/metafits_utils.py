@@ -54,8 +54,13 @@ def obs_max_min(data_dir, lochan):
         sys.exit(0)
     all_data = glob.glob(f"{data_dir}/*ch{lochan}*")
     if len(all_data) == 0:
-        logger.error(f"Combined voltages in {data_dir} does not exists. Exiting...")
-        sys.exit(0)
+        all_data = glob.glob(f"{data_dir}/*{lochan}.sub")
+        if len(all_data) == 0:
+            logger.error(f"Combined voltages in {data_dir} does not exists. Exiting...")
+            sys.exit(0)
+        else:
+            obs_times = [int(o.split("_")[-2]) for o in all_data]
+            return np.min(obs_times), np.max(obs_times)+7
     obs_times = [int(o.split("_")[-2]) for o in all_data]
     return np.min(obs_times), np.max(obs_times)
 
