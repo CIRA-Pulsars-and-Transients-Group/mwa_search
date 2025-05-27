@@ -229,7 +229,7 @@ process search_dd_fft_acc {
         # Split into each value
         IFS=, read -r dm_min dm_max dm_step ndm timeres downsamp nsub wf <<< \${ddplan}
         # Calculate the number of output data points
-        numout=\$(bc <<< "scale=0; ${dur} * 10000 / \${downsamp}")
+        numout=\$(awk -v a=${dur} -v b=\${downsamp} "BEGIN {printf a * 10000 / b}")
         numout=\$(printf "%.0f\n" "\${numout}")
         if (( \$numout % 2 != 0 )) ; then
             numout=\$(expr \$numout + 1)
@@ -428,8 +428,10 @@ process prepfold {
         tar -xvf ${cand_tar} --force-local --wildcards \${name%_ACCEL*}*.cand
 
         # Set up the prepfold options to match the ML candidate profiler
-        period=\$(echo "scale=8; \$period / 1000" | bc | awk '{printf "%.8f", \$0}')
-        if (( \$(echo "\$period > 0.01" | bc -l) )); then
+        period=\$(awk -v a=\$period "BEGIN {printf a/1000}" | awk '{printf "%.8f", \$0}')
+        #period=\$(echo "scale=8; \$period / 1000" | bc | awk '{printf "%.8f", \$0}')
+        if [[ \$(awk "BEGIN{print (\$period > 0.01)}") -eq 1 ]]; then
+        #if (( \$(echo "\$period > 0.01" | bc -l) )); then
             nbins=100
             ntimechunk=120
             dmstep=1
@@ -443,8 +445,10 @@ process prepfold {
         fi
 
         # Work out how many dmfacts to use to search +/- 2 DM
-        ddm=\$(echo "scale=10;0.000241*138.87^2*\${dmstep} / (1/\$period *\$nbins)" | bc)
-        ndmfact=\$(echo "1 + 1/(\$ddm*\$nbins)" | bc)
+        ddm=\$(awk -v a=\${dmstep} -v b=\$period -v c=\$nbins "BEGIN {printf 0.000241*138.87^2*a / (1/b *c)}")
+        #ddm=\$(echo "scale=10;0.000241*138.87^2*\${dmstep} / (1/\$period *\$nbins)" | bc)
+        ndmfact=\$(awk -v a=\$ddm -v b=\$nbins 'BEGIN {printf "%.0f", 1 + 1/(a*b)}')
+        #ndmfact=\$(echo "1 + 1/(\$ddm*\$nbins)" | bc)
         echo "ndmfact: \$ndmfact   ddm: \$ddm"
 
         if ${params.rfifind}; then
