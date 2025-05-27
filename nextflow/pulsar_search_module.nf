@@ -466,6 +466,86 @@ process prepfold {
 }
 
 
+process prepfold_multicpu {
+    label 'cpu'
+    label 'presto_prepfold'
+
+    publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_prepfold
+    time "${ (int) ( params.prepfold_scale * dur ) }s"
+    errorStrategy 'retry'
+    maxRetries 1
+
+    input:
+    tuple val(cand_lines), val(obsid), val(dur), path(cand_tar), path(fits_dir), path(rfifind_mask), path(rfifind_stats)
+
+    output:
+    tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png")//, optional: true) // some PRESTO installs don't make pngs
+
+    //no mask command currently
+    """
+    threads_per_core=2
+    export OMP_NUM_THREADS=\$((SLURM_CPUS_PER_TASK * threads_per_core))
+    export OMP_PLACES=threads
+    export OMP_PROC_BIND=close
+
+    cand_lines=("${cand_lines instanceof Collection ? cand_lines.join('" "').replace(", ", ",") : cand_lines}")
+
+    # Loop over each candidate
+    for (( idx=0; idx<\${#cand_lines[@]}; idx++ )); do
+        # cut off [ and ]
+        cand_line=\$( echo "\${cand_lines[idx]}" | cut -d "[" -f 2 | cut -d "]" -f 1 )
+        echo \${cand_line}
+        # Split into each value
+        IFS=, read -r name dm c3 c4 nharm period c7 c8 c9 c10 c11 <<< \${cand_line}
+        fits_name=\${name%_DM*}
+        fits_name=\${fits_name#*_}
+        tar -xvf ${cand_tar} --force-local --wildcards \${name%_ACCEL*}*.inf
+        tar -xvf ${cand_tar} --force-local --wildcards \${name%_ACCEL*}*.cand
+
+        # Set up the prepfold options to match the ML candidate profiler
+        period=\$(awk -v a=\$period "BEGIN {printf a/1000}" | awk '{printf "%.8f", \$0}')
+        #period=\$(echo "scale=8; \$period / 1000" | bc | awk '{printf "%.8f", \$0}')
+        if [[ \$(awk "BEGIN{print (\$period > 0.01)}") -eq 1 ]]; then
+        #if (( \$(echo "\$period > 0.01" | bc -l) )); then
+            nbins=100
+            ntimechunk=120
+            dmstep=1
+            period_search_n=1
+        else
+            # bin size is smaller than time resolution so reduce nbins
+            nbins=50
+            ntimechunk=40
+            dmstep=3
+            period_search_n=2
+        fi
+
+        # Work out how many dmfacts to use to search +/- 2 DM
+        ddm=\$(awk -v a=\${dmstep} -v b=\$period -v c=\$nbins "BEGIN {printf 0.000241*138.87^2*a / (1/b *c)}")
+        #ddm=\$(echo "scale=10;0.000241*138.87^2*\${dmstep} / (1/\$period *\$nbins)" | bc)
+        ndmfact=\$(awk -v a=\$ddm -v b=\$nbins 'BEGIN {printf "%.0f", 1 + 1/(a*b)}')
+        #ndmfact=\$(echo "1 + 1/(\$ddm*\$nbins)" | bc)
+        echo "ndmfact: \$ndmfact   ddm: \$ddm"
+
+        if ${params.rfifind}; then
+            rfifind_command="-mask *_rfifind.mask"
+        else
+            rfifind_command=""
+        fi
+
+        thread_id_start=\$((idx * OMP_NUM_THREADS))
+        thread_id_end=\$((thread_id_start + OMP_NUM_THREADS - 1))
+
+        numactl -C "\${thread_id_start}-\${thread_id_end}" prepfold -ncpus \$OMP_NUM_THREADS \
+        -o \$name  -accelfile \${name%:*}.cand -accelcand \${name##*:} \
+        -n \$nbins -dm \$dm -nosearch -noxwin -noclip -nsub 256 -npart \$ntimechunk -dmstep \$dmstep \
+        -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact \${rfifind_command} \
+        ${dedisp_options} ${params.vcsdir}/${obsid}/pointings/${fits_dir}/\${fits_name}*.fits &
+
+    done
+    """
+}
+
+
 process search_dd {
     label 'cpu'
     label 'presto_search'
@@ -587,7 +667,7 @@ workflow pulsar_search {
             .map { cand_lines, obsid, durs, cand_tar, fits_dir -> [ cand_lines, obsid.unique()[0], durs.sum(), cand_tar.unique()[0], fits_dir.unique()[0] ]}
             .combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
             // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
-        prepfold( cands_for_prepfold )
+        prepfold_multicpu( cands_for_prepfold )
 
         // Combined the grouped single pulse files with the fits files
         //single_pulse_searcher(
