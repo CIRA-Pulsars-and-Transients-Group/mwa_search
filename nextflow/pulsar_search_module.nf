@@ -31,7 +31,8 @@ if ( params.nooffsets ) {
 
 def search_time_estimate(dur, ndm) {
     // Estimate the duration of a search job in seconds
-    search_time = params.search_scale * Float.valueOf(dur) * (0.006*Float.valueOf(ndm) + 1)
+    // Add 60 min of fixed time
+    search_time = 3600 + (params.search_scale * Float.valueOf(dur) * (0.006*Float.valueOf(ndm) + 1))
     // Max time is 24 hours for many clusters so always use less than that
     if ( search_time < 86400 ) {
         return "${search_time}s"
@@ -479,12 +480,12 @@ process prepfold_multicpu {
     tuple val(cand_lines), val(obsid), val(dur), path(cand_tar), path(fits_dir), path(rfifind_mask), path(rfifind_stats)
 
     output:
-    tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png")//, optional: true) // some PRESTO installs don't make pngs
+    tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png"), optional: true // some PRESTO installs don't make pngs
 
     //no mask command currently
     """
     threads_per_core=2
-    export OMP_NUM_THREADS=\$((SLURM_CPUS_PER_TASK * threads_per_core))
+    export OMP_NUM_THREADS=\$((1 * threads_per_core))
     export OMP_PLACES=threads
     export OMP_PROC_BIND=close
 
@@ -535,7 +536,7 @@ process prepfold_multicpu {
         thread_id_start=\$((idx * OMP_NUM_THREADS))
         thread_id_end=\$((thread_id_start + OMP_NUM_THREADS - 1))
 
-        numactl -C "\${thread_id_start}-\${thread_id_end}" prepfold -ncpus \$OMP_NUM_THREADS \
+        numactl -C "\${thread_id_start}-\${thread_id_end}" ${params.singularity_cmd} prepfold -ncpus \$OMP_NUM_THREADS \
         -o \$name  -accelfile \${name%:*}.cand -accelcand \${name##*:} \
         -n \$nbins -dm \$dm -nosearch -noxwin -noclip -nsub 256 -npart \$ntimechunk -dmstep \$dmstep \
         -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact \${rfifind_command} \
@@ -675,7 +676,7 @@ workflow pulsar_search {
         //)
     emit:
         // [ pfd, bestprof, ps, png ]
-        prepfold.out
+        prepfold_multicpu.out
 }
 
 workflow single_pulse_search {
