@@ -33,8 +33,8 @@ def search_time_estimate(dur, ndm) {
     // Estimate the duration of a search job in seconds
     // Add 60 min of fixed time
     search_time = 3600 + (params.search_scale * Float.valueOf(dur) * (0.006*Float.valueOf(ndm) + 1))
-    // Max time is 24 hours for many clusters so always use less than that
-    if ( search_time < 86400 ) {
+    // Set the max wall time, for many clusters it is 24 hours 
+    if ( search_time < params.max_wall_time ) {
         return "${search_time}s"
     }
     else {
@@ -323,6 +323,10 @@ process run_ffa {
     for f in !{ffa}; do
         echo ${f}
         tar -xvf ${f} --force-local
+        if !{params.delete_files}; then
+            source_file=$(ls -l $f | awk '{print $NF}')
+            rm $source_file
+        fi
     done
     rffa *.inf -c !{params.ffa_config}
     if [ ! -f peaks.csv ]; then
