@@ -183,7 +183,7 @@ process rfifind {
     label 'cpu'
     label 'presto_rfifind'
 
-    time '4h'
+    time '6h'
     memory '3680 MB'
 
     input:
@@ -200,7 +200,172 @@ process rfifind {
         touch ${name}_rfifind.stats
     fi
     """
-} 
+}
+
+
+process search_dd_only {
+    label 'cpu'
+    label 'presto_search_multicpu'
+
+    time { search_time_estimate(dur, params.max_work_function) }
+    memory { "${task.attempt * 1840} MB"}
+    maxRetries 1
+    errorStrategy 'retry'
+    maxForks params.max_search_jobs
+
+    input:
+    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(ndms_job), val(ddplans), path(rfifind_mask), path(rfifind_stats)
+
+    output:
+    tuple val(name), path("*.dat"), path("*.inf"), path('*ffa.tar')
+
+    """
+    printf "\\n#Dedispersing the time series at \$(date +"%Y-%m-%d_%H:%m:%S") --------------------------------------------\\n"
+    threads_per_core=`lscpu |grep "Thread(s) per core" |awk '{print \$NF}'`
+    export OMP_NUM_THREADS=\$((1 * threads_per_core))
+    export OMP_PLACES=threads
+    export OMP_PROC_BIND=close
+    numa_cpu_set=(`numactl -s | grep physcpubind | awk -v ORS='\n' '{ for (i = 2; i <= NF; i++) print $i }'`)
+
+    # Loop over ddplan lines
+    for ddplan in "${ddplans.join('" "').replace(", ", ",")}"; do
+        # cut off [ and ]
+        ddplan=\$( echo "\${ddplan}" | cut -d "[" -f 2 | cut -d "]" -f 1 )
+        echo \${ddplan}
+        # Split into each value
+        IFS=, read -r dm_min dm_max dm_step ndm timeres downsamp nsub wf <<< \${ddplan}
+        # Calculate the number of output data points
+        numout=\$(awk -v a=${dur} -v b=\${downsamp} "BEGIN {printf a * 10000 / b}")
+        numout=\$(printf "%.0f\n" "\${numout}")
+        if (( \$numout % 2 != 0 )) ; then
+            numout=\$(expr \$numout + 1)
+        fi
+        if ${params.rfifind}; then
+            rfifind_command="-mask ${name}_rfifind.mask"
+        else
+            rfifind_command=""
+        fi 
+        echo "Performing dedispersion with"
+        echo "    dm_min: \${dm_min}, dm_max: \${dm_max}, dm_step: \${dm_step}"
+        echo "    ndm: \${ndm}, timeres: \${timeres}, downsamp: \${downsamp}, nsub: \${nsub}, nout: \${numout}"
+        echo "    dedispersion options : ${dedisp_options},"
+        for (( idx_cpu=0; idx_cpu<\${threads_per_core}; idx_cpu++ )); do
+            numa_cpus+="\${numa_cpu_set[idx+idx_cpu]},"
+        done
+        numactl -C "\${numa_cpus%,}" ${params.singularity_cmd} prepsubband -ncpus ${task.cpus} -lodm \${dm_min} -dmstep \${dm_step} -numdms \${ndm} -nsub \${nsub} \
+-downsamp \${downsamp} -numout \${numout} ${dedisp_options} -o ${name} \${rfifind_command} \
+${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
+    done
+
+    printf "\\n#Tar-ing up the required .dat files at \$(date +"%Y-%m-%d_%H:%m:%S") --------------------------------------\\n"
+    if ${params.ffa}; then
+        for f in `cat ${params.ffa_dms}`; do
+            if [ -f ${name}_DM\${f}.inf ]; then
+                echo ${name}_DM\${f}.dat >> files_to_tar.txt
+                echo ${name}_DM\${f}.inf >> files_to_tar.txt
+            fi
+        done
+        if [ -f files_to_tar.txt ]; then
+            tar -cf ${name}_DM\${dm_max}_ffa.tar --force-local -T files_to_tar.txt
+        fi
+    fi
+    if [ ! -f ${name}_DM\${dm_max}_ffa.tar ]; then
+        tar -cf ${name}_DM\${dm_max}_ffa.tar --force-local -T /dev/null
+    fi
+
+    printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%m:%S") ----------------------------------------------------------------\\n"
+    """
+}
+
+
+process fft_acc {
+    label 'cpu'
+    label 'presto_search_multicpu'
+
+    time { search_time_estimate(dur, params.max_work_function) }
+    memory { "${task.attempt * 1840} MB"}
+    maxRetries 1
+    errorStrategy 'retry'
+    maxForks params.max_search_jobs
+    publishDir params.out_dir, mode: 'copy'
+
+    input:
+    tuple val(name), path(dat_files), path(inf_files)
+
+    output:
+    tuple val(name), path("*ACCEL_${params.zmax}.tar"), path("*inf.tar"), path("*singlepulse.tar"), path('*cand.tar')
+
+    """
+    threads_per_core=`lscpu |grep "Thread(s) per core" |awk '{print \$NF}'`
+    export OMP_NUM_THREADS=\$((1 * threads_per_core))
+    export OMP_PLACES=threads
+    export OMP_PROC_BIND=close
+    numa_cpu_set=(`numactl -s | grep physcpubind | awk -v ORS='\n' '{ for (i = 2; i <= NF; i++) print $i }'`)
+
+    datfiles=(*.dat)
+
+    for (( idx=0; idx<\${#datfiles[@]}; idx++ )); do
+        for (( idx_cpu=0; idx_cpu<\${threads_per_core}; idx_cpu++ )); do
+            numa_cpus+="\${numa_cpu_set[idx+idx_cpu]},"
+        done
+        numa_cpus_list+=("\${numa_cpus%,}")
+    done
+
+    printf "\\n#Performing the single pulse search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
+    ${params.presto_python_load}
+    for (( idx=0; idx<\${#datfiles[@]}; idx++ )); do
+        numactl -C "\${numa_cpus_list[idx]}" ${params.singularity_cmd} single_pulse_search.py -p -m 0.5 -b \${datfiles[idx]} &
+    done
+
+    wait
+
+    printf "\\n#Performing the FFTs at \$(date +"%Y-%m-%d_%H:%m:%S") -----------------------------------------------------\\n"
+    for (( idx=0; idx<\${#datfiles[@]}; idx++ )); do
+        numactl -C "\${numa_cpus_list[idx]}" ${params.singularity_cmd} realfft \${datfiles[idx]} &
+    done
+
+    wait
+
+    if ${params.rednoise}; then
+        for (( idx=0; idx<\${#datfiles[@]}; idx++ )); do
+            numactl -C "\${numa_cpus_list[idx]}" ${params.singularity_cmd} rednoise \${datfiles[idx]%.dat}.fft &
+        done
+
+        wait
+
+        for (( idx=0; idx<\${#datfiles[@]}; idx++ )); do
+            mv \${datfiles[idx]%.dat}_red.fft \${datfiles[idx]%.dat}.fft
+            mv \${datfiles[idx]%.dat}_red.inf \${datfiles[idx]%.dat}.inf
+        done
+    fi
+
+    printf "\\n#Performing the periodic search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
+    # Somtimes this has a 255 error code when data.pow == 0 so ignore it
+    for (( idx=0; idx<\${#datfiles[@]}; idx++ )); do
+        numactl -C "\${numa_cpus_list[idx]}" ${params.singularity_cmd}accelsearch -ncpus ${task.cpus} -zmax ${params.zmax} -flo ${min_f_harm} -fhi ${max_f_harm} -numharm ${params.nharm} \${i%.dat}.fft || true &
+    done
+
+    wait
+
+    if ${params.delete_files}; then
+        for i in \$(ls *.dat); do
+            source_file=$(ls -l \$f | awk '{print \$NF}')
+            rm \$source_file \${i%.dat}.fft
+        done
+    fi
+
+    printf "\\n#Tar-ing up the data at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
+    tar -cf ${name}_DM\${dm_max}_ACCEL_${params.zmax}.tar --force-local *ACCEL_${params.zmax}
+    tar -cf ${name}_DM\${dm_max}_inf.tar --force-local *.inf
+    tar -cf ${name}_DM\${dm_max}_singlepulse.tar --force-local *.singlepulse
+    tar -cf ${name}_DM\${dm_max}_cand.tar --force-local *.cand
+    if ${params.delete_files}; then
+        rm *ACCEL_${params.zmax} *.inf *.singlepulse *.cand *.txtcand
+    fi
+
+    printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%m:%S") ----------------------------------------------------------------\\n"
+    """
+}
     
 
 process search_dd_fft_acc {
@@ -474,22 +639,23 @@ process prepfold_multicpu {
 
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_prepfold
     time "${ (int) ( params.prepfold_scale * dur ) }s"
-    cpus "${ (int) ( total_dur / dur ) }"
+    cpus "${ (int) ( num_fold ) }"
     errorStrategy 'retry'
     maxRetries 1
 
     input:
-    tuple val(cand_lines), val(obsid), val(dur), val(total_dur) path(cand_tar), path(fits_dir), path(rfifind_mask), path(rfifind_stats)
+    tuple val(cand_lines), val(obsid), val(dur), val(num_fold), path(cand_tar), path(fits_dir), path(rfifind_mask), path(rfifind_stats)
 
     output:
     tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png"), optional: true // some PRESTO installs don't make pngs
 
     //no mask command currently
     """
-    threads_per_core=2
+    threads_per_core=`lscpu |grep "Thread(s) per core" |awk '{print \$NF}'`
     export OMP_NUM_THREADS=\$((1 * threads_per_core))
     export OMP_PLACES=threads
     export OMP_PROC_BIND=close
+    numa_cpu_set=(`numactl -s | grep physcpubind | awk -v ORS='\n' '{ for (i = 2; i <= NF; i++) print $i }'`)
 
     cand_lines=("${cand_lines instanceof Collection ? cand_lines.join('" "').replace(", ", ",") : cand_lines}")
 
@@ -535,10 +701,12 @@ process prepfold_multicpu {
             rfifind_command=""
         fi
 
-        thread_id_start=\$((idx * OMP_NUM_THREADS))
-        thread_id_end=\$((thread_id_start + OMP_NUM_THREADS - 1))
+        # Assign CPUs to jobs
+        for (( idx_cpu=0; idx_cpu<\${threads_per_core}; idx_cpu++ )); do
+            numa_cpus+="\${numa_cpu_set[idx+idx_cpu]},"
+        done
 
-        numactl -C "\${thread_id_start}-\${thread_id_end}" ${params.singularity_cmd} prepfold -ncpus \$OMP_NUM_THREADS \
+        numactl -C "\${numa_cpus%,}" ${params.singularity_cmd} prepfold -ncpus \$OMP_NUM_THREADS \
         -o \$name  -accelfile \${name%:*}.cand -accelcand \${name##*:} \
         -n \$nbins -dm \$dm -nosearch -noxwin -noclip -nsub 256 -npart \$ntimechunk -dmstep \$dmstep \
         -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact \${rfifind_command} \
@@ -639,21 +807,60 @@ workflow pulsar_search {
         // Also using groupKey so that future groupTuple will have the size of the total number of DMs
         // The DDplan file has the name format DDplan_{i}_a{total_dm_steps}_n{local_dm_steps}.txt
         rfifind( name_fits_freq_dur )
-        search_dd_fft_acc(
-            ddplan.out.transpose()
-            .map { obsid, name, fits, freq, dur, ddplan ->
-                [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
-            }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
-        )
-        // Output format: [ name,  ACCEL_summary, presto_inf, single_pulse, periodic_candidates ]
 
-        // Get all the inf, ACCEL and single pulse files and sort them into groups with the same name key
-        // This uses the groupKey so it should output the channel as soon as it has all the DMs
-        inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, dat -> [ key.toString(), accel, inf, sp, cands ] }
-        accelsift( inf_accel_sp_cand )
-        if ( params.ffa ) {
-            ffa_input = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, ffa -> [ key.toString(), ffa ] }
-            run_ffa( ffa_input )
+        if ( params.multicpu ) {
+            search_dd_only(
+                ddplan.out.transpose()
+                .map { obsid, name, fits, freq, dur, ddplan ->
+                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
+                }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
+            )
+            if ( params.ffa ) {
+                ffa_input = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, dat, inf, ffa -> [ key.toString(), ffa ] }
+                run_ffa( ffa_input )
+            }
+            ch_dat_files = search_dd_only.out.map{ [ it[1] ] }
+                .flatten()
+                .map { dat_file -> [ dat_file.baseName, dat_file ] }
+            ch_inf_files = search_dd_only.out.map{ [ it[2] ] }
+                .flatten()
+                .map { inf_file -> [ inf_file.baseName, inf_file ] }
+            ch_dat_files
+                // Pair dat and inf files
+                .cross(ch_inf_files)
+                // Combine tuples and remove keys
+                .map { [ it[0][1], it[1][1] ] }
+                // Collate into FDAS jobs
+                .collate(Integer.valueOf(params.max_fdas_tasks), remainder = true)
+                // Input array:      [ [dat0, inf0], ..., [datN, infN] ]
+                // Transposed array: [ [dat0, ..., datN], [inf0, ..., infN] ]
+                .map { GroovyCollections.transpose(it) }
+                .set { ch_fdas_jobs }
+            fft_acc(search_dd_only.out.map{ [ it[0].toString() ]}.combine(ch_fdas_jobs))
+            // Get all the inf, ACCEL and single pulse files and sort them into groups with the same name key
+            // This uses the groupKey so it should output the channel as soon as it has all the DMs
+            inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel, inf, sp, cands ] }
+            accelsift( inf_accel_sp_cand )
+        }
+        else {
+            search_dd_fft_acc(
+                ddplan.out.transpose()
+                .map { obsid, name, fits, freq, dur, ddplan ->
+                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
+                }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
+            )
+
+            
+            // Output format: [ name,  ACCEL_summary, presto_inf, single_pulse, periodic_candidates ]
+
+            // Get all the inf, ACCEL and single pulse files and sort them into groups with the same name key
+            // This uses the groupKey so it should output the channel as soon as it has all the DMs
+            inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, dat -> [ key.toString(), accel, inf, sp, cands ] }
+            accelsift( inf_accel_sp_cand )
+            if ( params.ffa ) {
+                ffa_input = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, ffa -> [ key.toString(), ffa ] }
+                run_ffa( ffa_input )
+            }
         }
 
         // For each line of each candidate file and treat it as a candidate
@@ -668,7 +875,7 @@ workflow pulsar_search {
                 .collate( params.max_folds_per_job )
                 // reformat them to be in lists for each data type
                 .transpose().collate( 5 )
-                .map { cand_lines, obsid, durs, cand_tar, fits_dir -> [ cand_lines, obsid.unique()[0], durs[0], durs.sum(), cand_tar.unique()[0], fits_dir.unique()[0] ]}
+                .map { cand_lines, obsid, durs, cand_tar, fits_dir -> [ cand_lines, obsid.unique()[0], durs[0], durs.count(), cand_tar.unique()[0], fits_dir.unique()[0] ]}
                 .combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
                 // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
             prepfold_multicpu( cands_for_prepfold )
