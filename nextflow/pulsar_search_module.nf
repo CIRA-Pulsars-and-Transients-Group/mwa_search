@@ -265,6 +265,10 @@ ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
         tar -cf ${name}_DM\${dm_max}_ffa.tar --force-local -T /dev/null
     fi
 
+    printf "\\n#Performing the single pulse search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
+    ${params.presto_python_load}
+    single_pulse_search.py -p -m 0.5 -b *.dat
+
     printf "\\n#Performing the FFTs at \$(date +"%Y-%m-%d_%H:%m:%S") -----------------------------------------------------\\n"
     printf "\\n#Performing the periodic search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
     for i in \$(ls *.dat); do
@@ -277,17 +281,10 @@ ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
         # Somtimes this has a 255 error code when data.pow == 0 so ignore it
         accelsearch -ncpus ${task.cpus} -zmax ${params.zmax} -flo ${min_f_harm} -fhi ${max_f_harm} -numharm ${params.nharm} \${i%.dat}.fft || true
         if ${params.delete_files}; then
-            rm \${i%.dat}.fft
+            rm \${i%.dat}.fft \${i}
         fi
     done
 
-    printf "\\n#Performing the single pulse search at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
-    ${params.presto_python_load}
-    single_pulse_search.py -p -m 0.5 -b *.dat
-    if ${params.delete_files}; then
-        rm *.dat
-    fi 
-    
     printf "\\n#Tar-ing up the data at \$(date +"%Y-%m-%d_%H:%m:%S") ------------------------------------------\\n"
     tar -cf ${name}_DM\${dm_max}_ACCEL_${params.zmax}.tar --force-local *ACCEL_${params.zmax}
     tar -cf ${name}_DM\${dm_max}_inf.tar --force-local *.inf
@@ -477,11 +474,12 @@ process prepfold_multicpu {
 
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_prepfold
     time "${ (int) ( params.prepfold_scale * dur ) }s"
+    cpus "${ (int) ( total_dur / dur ) }"
     errorStrategy 'retry'
     maxRetries 1
 
     input:
-    tuple val(cand_lines), val(obsid), val(dur), path(cand_tar), path(fits_dir), path(rfifind_mask), path(rfifind_stats)
+    tuple val(cand_lines), val(obsid), val(dur), val(total_dur) path(cand_tar), path(fits_dir), path(rfifind_mask), path(rfifind_stats)
 
     output:
     tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png"), optional: true // some PRESTO installs don't make pngs
@@ -664,23 +662,37 @@ workflow pulsar_search {
         // For each accel cand, pair it with its inf and cand files
         accel_inf_cands = accel_cands.combine( accel_tar )
         // Pair them with fits files and metadata so they are ready to fold
-        cands_for_prepfold = name_fits_freq_dur.combine( accel_inf_cands ).map{it -> [it[7], it[0], Float.valueOf(it[4]), it[-1], it[2]] }
-            // collate by several prepfold jobs together
-            .collate( params.max_folds_per_job )
-            // reformat them to be in lists for each data type
-            .transpose().collate( 5 )
-            .map { cand_lines, obsid, durs, cand_tar, fits_dir -> [ cand_lines, obsid.unique()[0], durs.sum(), cand_tar.unique()[0], fits_dir.unique()[0] ]}
-            .combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
-            // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
-        prepfold_multicpu( cands_for_prepfold )
-
+        if ( params.multicpu ) {
+            cands_for_prepfold = name_fits_freq_dur.combine( accel_inf_cands ).map{it -> [it[7], it[0], Float.valueOf(it[4]), it[-1], it[2]] }
+                // collate by several prepfold jobs together
+                .collate( params.max_folds_per_job )
+                // reformat them to be in lists for each data type
+                .transpose().collate( 5 )
+                .map { cand_lines, obsid, durs, cand_tar, fits_dir -> [ cand_lines, obsid.unique()[0], durs[0], durs.sum(), cand_tar.unique()[0], fits_dir.unique()[0] ]}
+                .combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
+                // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
+            prepfold_multicpu( cands_for_prepfold )
+            prepfold_out = prepfold_multicpu.out
+        }
+        else {
+            cands_for_prepfold = name_fits_freq_dur.combine( accel_inf_cands ).map{it -> [it[7], it[0], Float.valueOf(it[4]), it[-1], it[2]] }
+                // collate by several prepfold jobs together
+                .collate( params.max_folds_per_job )
+                // reformat them to be in lists for each data type
+                .transpose().collate( 5 )
+                .map { cand_lines, obsid, durs, cand_tar, fits_dir -> [ cand_lines, obsid.unique()[0], durs.sum(), cand_tar.unique()[0], fits_dir.unique()[0] ]}
+                .combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
+                // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
+            prepfold( cands_for_prepfold )
+            prepfold_out = prepfold.out
+        }
         // Combined the grouped single pulse files with the fits files
         //single_pulse_searcher(
         //    inf_accel_sp_cand.map{ [ it[0], it[3] ] }.combine( name_fits_freq_dur ).map{ [ it[3], it[2], it[1], it[4] ] }
         //)
     emit:
         // [ pfd, bestprof, ps, png ]
-        prepfold_multicpu.out
+        prepfold_out
 }
 
 workflow single_pulse_search {
