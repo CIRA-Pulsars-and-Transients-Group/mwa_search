@@ -323,12 +323,14 @@ process run_ffa {
     for f in !{ffa}; do
         echo ${f}
         tar -xvf ${f} --force-local
-        if !{params.delete_files}; then
-            source_file=$(ls -l $f | awk '{print $NF}')
-            rm $source_file
-        fi
     done
     rffa *.inf -c !{params.ffa_config}
+    if !{params.delete_files}; then
+        for f in !{ffa}; do
+            source_file=$(ls -l $f | awk '{print $NF}')
+            rm $source_file
+        done
+    fi
     if [ ! -f peaks.csv ]; then
         touch peaks.csv
     fi
