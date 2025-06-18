@@ -208,7 +208,6 @@ process search_dd_only {
     label 'presto_search_multicpu'
 
     time { search_time_estimate(dur, params.max_work_function) }
-    memory { "${task.attempt * 1840} MB"}
     maxRetries 1
     errorStrategy 'retry'
     maxForks params.max_search_jobs
@@ -222,10 +221,13 @@ process search_dd_only {
     """
     printf "\\n#Dedispersing the time series at \$(date +"%Y-%m-%d_%H:%m:%S") --------------------------------------------\\n"
     threads_per_core=`lscpu |grep "Thread(s) per core" |awk '{print \$NF}'`
+    while [[ -z "\${threads_per_core}" ]]; do
+        threads_per_core=`lscpu |grep "Thread(s) per core" |awk '{print \$NF}'`
+    done
     export OMP_NUM_THREADS=\$((1 * threads_per_core))
     export OMP_PLACES=threads
     export OMP_PROC_BIND=close
-    numa_cpu_set=(`numactl -s | grep physcpubind | awk -v ORS='\n' '{ for (i = 2; i <= NF; i++) print $i }'`)
+    numa_cpu_set=(`numactl -s | grep physcpubind | awk -v ORS='\n' '{ for (i = 2; i <= NF; i++) print \$i }'`)
 
     # Loop over ddplan lines
     for ddplan in "${ddplans.join('" "').replace(", ", ",")}"; do
@@ -250,7 +252,7 @@ process search_dd_only {
         echo "    ndm: \${ndm}, timeres: \${timeres}, downsamp: \${downsamp}, nsub: \${nsub}, nout: \${numout}"
         echo "    dedispersion options : ${dedisp_options},"
         for (( idx_cpu=0; idx_cpu<\${threads_per_core}; idx_cpu++ )); do
-            numa_cpus+="\${numa_cpu_set[idx+idx_cpu]},"
+            numa_cpus+="\${numa_cpu_set[idx_cpu]},"
         done
         numactl -C "\${numa_cpus%,}" ${params.singularity_cmd} prepsubband -ncpus ${task.cpus} -lodm \${dm_min} -dmstep \${dm_step} -numdms \${ndm} -nsub \${nsub} \
 -downsamp \${downsamp} -numout \${numout} ${dedisp_options} -o ${name} \${rfifind_command} \
@@ -283,7 +285,6 @@ process fft_acc {
     label 'presto_search_multicpu'
 
     time { search_time_estimate(dur, params.max_work_function) }
-    memory { "${task.attempt * 1840} MB"}
     maxRetries 1
     errorStrategy 'retry'
     maxForks params.max_search_jobs
@@ -297,10 +298,13 @@ process fft_acc {
 
     """
     threads_per_core=`lscpu |grep "Thread(s) per core" |awk '{print \$NF}'`
+    while [[ -z "\${threads_per_core}" ]]; do
+        threads_per_core=`lscpu |grep "Thread(s) per core" |awk '{print \$NF}'`
+    done
     export OMP_NUM_THREADS=\$((1 * threads_per_core))
     export OMP_PLACES=threads
     export OMP_PROC_BIND=close
-    numa_cpu_set=(`numactl -s | grep physcpubind | awk -v ORS='\n' '{ for (i = 2; i <= NF; i++) print $i }'`)
+    numa_cpu_set=(`numactl -s | grep physcpubind | awk -v ORS='\n' '{ for (i = 2; i <= NF; i++) print \$i }'`)
 
     datfiles=(*.dat)
 
@@ -349,7 +353,7 @@ process fft_acc {
 
     if ${params.delete_files}; then
         for i in \$(ls *.dat); do
-            source_file=$(ls -l \$f | awk '{print \$NF}')
+            source_file=\$(ls -l \$f | awk '{print \$NF}')
             rm \$source_file \${i%.dat}.fft
         done
     fi
@@ -652,10 +656,13 @@ process prepfold_multicpu {
     //no mask command currently
     """
     threads_per_core=`lscpu |grep "Thread(s) per core" |awk '{print \$NF}'`
+    while [[ -z "\${threads_per_core}" ]]; do
+        threads_per_core=`lscpu |grep "Thread(s) per core" |awk '{print \$NF}'`
+    done    
     export OMP_NUM_THREADS=\$((1 * threads_per_core))
     export OMP_PLACES=threads
     export OMP_PROC_BIND=close
-    numa_cpu_set=(`numactl -s | grep physcpubind | awk -v ORS='\n' '{ for (i = 2; i <= NF; i++) print $i }'`)
+    numa_cpu_set=(`numactl -s | grep physcpubind | awk -v ORS='\n' '{ for (i = 2; i <= NF; i++) print \$i }'`)
 
     cand_lines=("${cand_lines instanceof Collection ? cand_lines.join('" "').replace(", ", ",") : cand_lines}")
 
@@ -816,15 +823,18 @@ workflow pulsar_search {
                 }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
             )
             if ( params.ffa ) {
-                ffa_input = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, dat, inf, ffa -> [ key.toString(), ffa ] }
+                ffa_input = search_dd_only.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, dat, inf, ffa -> [ key.toString(), ffa ] }
                 run_ffa( ffa_input )
             }
+            search_dd_only.out.view()
             ch_dat_files = search_dd_only.out.map{ [ it[1] ] }
                 .flatten()
                 .map { dat_file -> [ dat_file.baseName, dat_file ] }
             ch_inf_files = search_dd_only.out.map{ [ it[2] ] }
                 .flatten()
                 .map { inf_file -> [ inf_file.baseName, inf_file ] }
+            ch_dat_files.view()
+            ch_inf_files.view()
             ch_dat_files
                 // Pair dat and inf files
                 .cross(ch_inf_files)
@@ -839,7 +849,7 @@ workflow pulsar_search {
             fft_acc(search_dd_only.out.map{ [ it[0].toString() ]}.combine(ch_fdas_jobs))
             // Get all the inf, ACCEL and single pulse files and sort them into groups with the same name key
             // This uses the groupKey so it should output the channel as soon as it has all the DMs
-            inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel, inf, sp, cands ] }
+            inf_accel_sp_cand = fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands -> [ key.toString(), accel, inf, sp, cands ] }
             accelsift( inf_accel_sp_cand )
         }
         else {
