@@ -126,7 +126,7 @@ process make_beam {
     path(pointings)
 
     """
-    srun make_mwa_tied_array_beam \
+    srun ${params.bf_cmd} make_mwa_tied_array_beam \
         -m ${params.vcsdir}/${params.obsid}/${params.obsid}.metafits \
         -b ${begin} \
         -T ${dur} \
