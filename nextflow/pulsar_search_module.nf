@@ -633,7 +633,7 @@ process accelsift {
 
 process prepfold {
     label 'cpu'
-    label 'presto_search'
+    label 'presto_prepfold'
 
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_prepfold
     time "${ (int) ( params.prepfold_scale * dur ) }s"
@@ -645,7 +645,7 @@ process prepfold {
     tuple val(cand_lines), val(obsid), val(dur), path(cand_tar), path(fits_dir), path(rfifind_mask), path(rfifind_stats)
 
     output:
-    tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png")//, optional: true) // some PRESTO installs don't make pngs
+    tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png"), optional: true // some PRESTO installs don't make pngs
 
     //no mask command currently
     """
