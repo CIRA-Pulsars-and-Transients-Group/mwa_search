@@ -184,7 +184,7 @@ process rfifind {
     label 'cpu'
     label 'presto_rfifind'
 
-    time "${ (int) ( params.rfifind_scale * dur ) }s"
+    time "${ params.rfifind_scale * Float.valueOf(dur) }s"
     memory '3680 MB'
 
     input:
