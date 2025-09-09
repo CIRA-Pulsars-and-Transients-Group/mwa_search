@@ -182,7 +182,7 @@ process rfifind {
     label 'cpu'
     label 'presto_rfifind'
 
-    time '4h'
+    time '24h'
     memory '3680 MB'
 
     input:
@@ -305,7 +305,7 @@ process run_ffa {
     label 'ffa'
     label 'cpu'
 
-    time '8h'
+    time '24h'
     memory '28 GB'
     maxRetries 1
     errorStrategy 'retry'
