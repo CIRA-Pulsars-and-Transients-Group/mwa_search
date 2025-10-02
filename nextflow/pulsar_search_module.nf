@@ -702,7 +702,7 @@ process prepfold {
 
 process prepfold_multicpu {
     label 'cpu'
-    label 'presto_prepfold'
+    label 'presto_prepfold_multicpu'
 
     publishDir params.out_dir, mode: 'copy', enabled: params.publish_all_prepfold
     time "${ (int) ( params.prepfold_scale * dur ) }s"
