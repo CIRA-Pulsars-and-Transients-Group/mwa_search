@@ -72,6 +72,8 @@ process get_freq_and_dur {
             # Grab the centre frequency in MHz
             freq = hdul[0].header['OBSFREQ']
             nchan = hdul[0].header['OBSNCHAN']
+            spectra_per_subint = hdul[1].header["NSBLK"]
+            time_res = hdul[1].header["TBIN"] * 1000 # Time resolution in ms
         # Calculate the observation duration in seconds
         dur += hdul[1].header['NAXIS2'] * hdul[1].header['TBIN'] * hdul[1].header['NSBLK']
 
@@ -80,7 +82,7 @@ process get_freq_and_dur {
     # Export both values as a CSV for easy output
     with open("name_freq_dur.csv", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
-        spamwriter.writerow([name, freq, dur, nchan])
+        spamwriter.writerow([name, freq, dur, nchan, time_res, spectra_per_subint])
     """
 }
 
@@ -88,7 +90,7 @@ process ddplan {
     label 'python'
 
     input:
-    tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur), val(nchan)
+    tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur), val(nchan), val(input_time_res), val(spectra_per_subint)
 
     output:
     tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur), path('DDplan*.txt')
@@ -101,7 +103,8 @@ process ddplan {
     from mwa_search.dispersion_tools import dd_plan
 
     if '${name}'.startswith('Blind'):
-        output = dd_plan(${centre_freq}, ${nchan} / 100, ${nchan}, 0.1, ${params.dm_min}, ${params.dm_max},
+        output = dd_plan(${centre_freq}, ${nchan} / 100, ${nchan}, input_time_res, spectra_per_subint,
+                         ${params.dm_min}, ${params.dm_max},
                          0.2, 0.8, smear_fact=3, nsub_smear_fact=3,
                          min_dm_step=${params.dm_min_step}, max_dm_step=${params.dm_max_step},
                          max_dms_per_job=${params.max_dms_per_job}, max_nsub=384)
@@ -111,7 +114,8 @@ process ddplan {
         if dm_min < 0.0:
             dm_min = 0.0
         dm_max = float(dm) + 2.0
-        output = dd_plan(${centre_freq}, ${nchan} / 100, ${nchan}, 0.1, dm_min, dm_max,
+        output = dd_plan(${centre_freq}, ${nchan} / 100, ${nchan}, input_time_res, spectra_per_subint,
+                         dm_min, dm_max, 0.2, 0.8, smear_fact=3, nsub_smear_fact=3,
                          min_DM_step=${params.dm_min_step}, max_DM_step=${params.dm_max_step},
                          max_dms_per_job=${params.max_dms_per_job})
 
@@ -188,7 +192,7 @@ process rfifind {
     memory '3680 MB'
 
     input:
-    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(nchan)
+    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(nchan), val(input_time_res), val(spectra_per_subint)
 
     output:
     tuple val(obsid), path("*rfifind.mask"), path("*rfifind.stats")
@@ -492,7 +496,7 @@ process run_ffa {
     label 'ffa'
     label 'cpu'
 
-    time '8h'
+    time "${ params.ffa_scale * Float.valueOf(dur) }s"
     memory '28 GB'
     maxRetries 1
     errorStrategy 'retry'
@@ -535,7 +539,7 @@ process run_ffa_dat {
     label 'ffa'
     label 'cpu'
 
-    time '8h'
+    time "${ params.ffa_scale * Float.valueOf(dur) }s"
     memory '28 GB'
     maxRetries 1
     errorStrategy 'retry'
@@ -649,6 +653,7 @@ process prepfold {
 
     //no mask command currently
     """
+    printf "\\n#Prepfold all FFT candidates at \$(date +"%Y-%m-%d_%H:%M:%S") --------------------------------------------\\n"
     # Loop over each candidate
     for cand_line in "${cand_lines.join('" "').replace(", ", ",")}"; do
         # cut off [ and ]
@@ -696,6 +701,7 @@ process prepfold {
     -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact \${rfifind_command} ${dedisp_options} ${params.vcsdir}/${obsid}/pointings/${fits_dir}/\${fits_name}*.fits
 
     done
+    printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%M:%S") ----------------------------------------------------------------\\n"
     """
 }
 
@@ -892,10 +898,10 @@ workflow pulsar_search {
         name_fits_files // [val(obsid), path(fits_files)]
     main:
         // Grab meta data from the fits file
-        get_freq_and_dur( name_fits_files ) // [ name, fits_file, freq, dur ]
+        get_freq_and_dur( name_fits_files ) // [ name, fits_file, freq, dur, time_res, spectra_per_subint ]
 
         // Grab the meta data out of the CSV
-        name_fits_freq_dur = get_freq_and_dur.out.map { obsid, fits, meta -> [ obsid, meta.splitCsv()[0][0], fits, meta.splitCsv()[0][1], meta.splitCsv()[0][2], meta.splitCsv()[0][3] ] }
+        name_fits_freq_dur = get_freq_and_dur.out.map { obsid, fits, meta -> [ obsid, meta.splitCsv()[0][0], fits, meta.splitCsv()[0][1], meta.splitCsv()[0][2], meta.splitCsv()[0][3], meta.splitCsv()[0][4], meta.splitCsv()[0][5] ] }
         name_fits_freq_dur.view()
         ddplan( name_fits_freq_dur )
         // ddplan's output format is [ name, fits_file, centrefreq(MHz), duration(s), DDplan_file ]

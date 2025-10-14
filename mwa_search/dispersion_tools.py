@@ -92,6 +92,7 @@ def dd_plan(
         bandwidth=30.72,
         nfreqchan=3072,
         start_timeres=0.1,
+        spectra_per_subint=10000,
         lowdm=0,
         highdm=500,
         smear_ref_freq_frac=0.2,
@@ -116,15 +117,18 @@ def dd_plan(
         The number of frequency channels
     start_timeres: float
         The time resolution of the observation in ms
+    spectra_per_subint: int
+        The number of spectra per subint, which is the block size for 
+        presto to process the fits data in
     lowdm: float
         The lowest dispersion measure
     highdm: float
         The highest dispersion measure
-    smear_ref_freq_frac
+    smear_ref_freq_frac: int
         The reference frequency as a fraction of the bandwidth to
         calculate the amount of smearing. 0 is the top of the band
         and 1 is the bottom of the band.
-    nsub_ref_freq_frac
+    nsub_ref_freq_frac: int
         The reference frequency as a fraction of the bandwidth to
         calculate the smearing caused by the difference in the
         central DM of a prepsubband step and the low/high DM of the
@@ -237,7 +241,7 @@ def dd_plan(
         if change_ds:
             timeres *= 2.
             downsample *= 2
-            while 10000 % downsample != 0:
+            while spectra_per_subint % downsample != 0:
                 downsample += 1
                 timeres += start_timeres
 
