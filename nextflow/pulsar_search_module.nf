@@ -103,7 +103,7 @@ process ddplan {
     from mwa_search.dispersion_tools import dd_plan
 
     if '${name}'.startswith('Blind'):
-        output = dd_plan(${centre_freq}, ${nchan} / 100, ${nchan}, input_time_res, spectra_per_subint,
+        output = dd_plan(${centre_freq}, ${nchan} / 100, ${nchan}, ${input_time_res}, ${spectra_per_subint},
                          ${params.dm_min}, ${params.dm_max},
                          0.2, 0.8, smear_fact=3, nsub_smear_fact=3,
                          min_dm_step=${params.dm_min_step}, max_dm_step=${params.dm_max_step},
