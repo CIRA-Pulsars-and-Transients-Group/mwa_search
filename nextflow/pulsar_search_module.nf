@@ -978,7 +978,7 @@ workflow pulsar_search {
                 dat_to_delete = ffa_input.map{ [it[0], it[1]] }.combine( csv ).combine( inf_accel_sp_cand.map{ it[-1] } )
                 cleanup( dat_to_delete )
             }
-            cands_for_prepfold = name_fits_freq_dur.combine( accel_inf_cands ).map{it -> [it[-3], it[0], Float.valueOf(it[4]), it[-1], it[2]] }
+            cands_for_prepfold = name_fits_freq_dur.combine( accel_inf_cands ).map{it -> [it[-2], it[0], Float.valueOf(it[4]), it[-1], it[2]] }
                 // collate by several prepfold jobs together
                 .collate( params.max_folds_per_job )
                 // reformat them to be in lists for each data type
@@ -990,7 +990,7 @@ workflow pulsar_search {
             prepfold_out = prepfold_multicpu.out
         }
         else {
-            cands_for_prepfold = name_fits_freq_dur.combine( accel_inf_cands ).map{it -> [it[-3], it[0], Float.valueOf(it[4]), it[-1], it[2]] }
+            cands_for_prepfold = name_fits_freq_dur.combine( accel_inf_cands ).map{it -> [it[-2], it[0], Float.valueOf(it[4]), it[-1], it[2]] }
                 // collate by several prepfold jobs together
                 .collate( params.max_folds_per_job )
                 // reformat them to be in lists for each data type
