@@ -919,7 +919,7 @@ workflow pulsar_search {
                 }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
             )
             if ( params.ffa ) {
-                ffa_input = search_dd_only.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, dur, dat, inf, ffa -> [ key.toString(), dat.unique(), ffa.unique() ] }.combine( name_fits_freq_dur.map{ it[3]} )
+                ffa_input = search_dd_only.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, dur, dat, inf, ffa -> [ key.toString(), dat.unique(), ffa.unique() ] }.combine( name_fits_freq_dur.map{ it[4]} )
                 run_ffa_dat( ffa_input )
             }
             ch_dat_files = search_dd_only.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ [ it[2] ] }
@@ -961,7 +961,7 @@ workflow pulsar_search {
             inf_accel_sp_cand = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, dat -> [ key.toString(), accel, inf, sp, cands ] }
             accelsift( inf_accel_sp_cand )
             if ( params.ffa ) {
-                ffa_input = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, ffa -> [ key.toString(), ffa ] }.combine( name_fits_freq_dur.map{ it[3]} )
+                ffa_input = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, ffa -> [ key.toString(), ffa ] }.combine( name_fits_freq_dur.map{ it[4]} )
                 run_ffa( ffa_input )
             }
         }
