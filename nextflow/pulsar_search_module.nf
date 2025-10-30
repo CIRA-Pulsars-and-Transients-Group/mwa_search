@@ -93,7 +93,7 @@ process ddplan {
     tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur), val(nchan), val(input_time_res), val(spectra_per_subint)
 
     output:
-    tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur), path('DDplan*.txt')
+    tuple val(obsid), val(name), path(fits_path), val(centre_freq), val(dur), val(spectra_per_subint), path('DDplan*.txt')
 
     """
     #!/usr/bin/env python
@@ -219,7 +219,7 @@ process search_dd_only {
     maxForks params.max_search_jobs
 
     input:
-    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(ndms_job), val(ddplans), path(rfifind_mask), path(rfifind_stats)
+    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(spectra_per_subint), val(ndms_job), val(ddplans), path(rfifind_mask), path(rfifind_stats)
 
     output:
     tuple val(name), val(dur), path("*.dat"), path("*.inf"), path('*ffa.tar')
@@ -243,7 +243,7 @@ process search_dd_only {
         # Split into each value
         IFS=, read -r dm_min dm_max dm_step ndm timeres downsamp nsub wf <<< \${ddplan}
         # Calculate the number of output data points
-        numout=\$(awk -v a=${dur} -v b=\${downsamp} "BEGIN {printf a * 10000 / b}")
+        numout=\$(awk -v a=${dur} -v b=\${downsamp} -v c=${spectra_per_subint} "BEGIN {printf a * c / b}")
         numout=\$(printf "%.0f\n" "\${numout}")
         if (( \$numout % 2 != 0 )) ; then
             numout=\$(expr \$numout + 1)
@@ -408,7 +408,7 @@ process search_dd_fft_acc {
     publishDir params.out_dir, mode: 'copy'
 
     input:
-    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(ndms_job), val(ddplans), path(rfifind_mask), path(rfifind_stats)
+    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(spectra_per_subint), val(ndms_job), val(ddplans), path(rfifind_mask), path(rfifind_stats)
 
     output:
     tuple val(name), path("*ACCEL_${params.zmax}.tar"), path("*inf.tar"), path("*singlepulse.tar"), path('*cand.tar'), path('*ffa.tar')
@@ -423,7 +423,7 @@ process search_dd_fft_acc {
         # Split into each value
         IFS=, read -r dm_min dm_max dm_step ndm timeres downsamp nsub wf <<< \${ddplan}
         # Calculate the number of output data points
-        numout=\$(awk -v a=${dur} -v b=\${downsamp} "BEGIN {printf a * 10000 / b}")
+        numout=\$(awk -v a=${dur} -v b=\${downsamp} -v c=${spectra_per_subint} "BEGIN {printf a * c / b}")
         numout=\$(printf "%.0f\n" "\${numout}")
         if (( \$numout % 2 != 0 )) ; then
             numout=\$(expr \$numout + 1)
@@ -444,14 +444,19 @@ ${params.vcsdir}/${obsid}/pointings/${fits_dir}/*.fits
 
     printf "\\n#Tar-ing up the required .dat files at \$(date +"%Y-%m-%d_%H:%M:%S") --------------------------------------\\n"
     if ${params.ffa}; then
-        for f in `cat ${params.ffa_dms}`; do
-            if [ -f ${name}_DM\${f}.inf ]; then
-                echo ${name}_DM\${f}.dat >> files_to_tar.txt
-                echo ${name}_DM\${f}.inf >> files_to_tar.txt
+        if [ -f ${params.ffa_dms} ]; then
+            echo "${params.ffa_dms} exists; reading from it for DMs to save..." 
+            for f in `cat ${params.ffa_dms}`; do
+                if [ -f ${name}_DM\${f}.inf ]; then
+                    echo ${name}_DM\${f}.dat >> files_to_tar.txt
+                    echo ${name}_DM\${f}.inf >> files_to_tar.txt
+                fi
+            done
+            if [ -f files_to_tar.txt ]; then
+                tar -cf ${name}_DM\${dm_max}_ffa.tar --force-local -T files_to_tar.txt
             fi
-        done
-        if [ -f files_to_tar.txt ]; then
-            tar -cf ${name}_DM\${dm_max}_ffa.tar --force-local -T files_to_tar.txt
+        else
+            tar -cf ${name}_DM\${dm_max}_ffa.tar --force-local ${name}_DM*.dat ${name}_DM*.inf
         fi
     fi
     if [ ! -f ${name}_DM\${dm_max}_ffa.tar ]; then
@@ -914,8 +919,8 @@ workflow pulsar_search {
         if ( params.multicpu ) {
             search_dd_only(
                 ddplan.out.transpose()
-                .map { obsid, name, fits, freq, dur, ddplan ->
-                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
+                .map { obsid, name, fits, freq, dur, spectra_per_subint, ddplan ->
+                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, spectra_per_subint, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
                 }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
             )
             if ( params.ffa ) {
@@ -948,8 +953,8 @@ workflow pulsar_search {
         else {
             search_dd_fft_acc(
                 ddplan.out.transpose()
-                .map { obsid, name, fits, freq, dur, ddplan ->
-                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
+                .map { obsid, name, fits, freq, dur, spectra_per_subint, ddplan ->
+                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, spectra_per_subint, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
                 }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
             )
 
