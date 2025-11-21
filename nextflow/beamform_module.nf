@@ -15,6 +15,9 @@ else {
 if ( params.downsamp > 1 ) {
    bf_out = " -D ${params.downsamp}" + bf_out
 }
+if (file(params.flagged_tiles).exists()) {
+   bf_out = " -F ${params.flagged_tiles}" + bf_out
+}
 
 def vcsbeam_time(dur) {
     full_time = (int) ( Float.valueOf(dur) * Float.valueOf(params.bf_time_per_sec) )
