@@ -7,7 +7,8 @@ if ( params.help ) {
              |                  The fits files must be in the format
              |                  <obsid>_<pointing>_ch<min_chan>-<max_chan>_00??.fits
              |Required argurments:
-             |  --fits_file The fits file to search [no default]
+             |  --obsid     The observation ID of the data to process [no default]
+             |  --fits_dir  The fits file to search [no default]
              |
              |Dedispersion arguments (optional):
              |  --dm_min    Minimum DM to search over [default: ${params.dm_min}]
@@ -22,6 +23,11 @@ if ( params.help ) {
              |              [default: ${params.max_dms_per_job}]
              |
              |Pulsar search arguments (optional):
+             |  --rfifind   Whether to run rfifind on the data [default: ${params.rfifind}]
+             |  --rednoise  Whether to run rednoise removal on the data [default: ${params.rednoise}]
+             |  --delete_files    
+             |              Whether to delete intermediate files [default: ${params.delete_files}]
+             |  --ffa       Whether to run ffa or not [default: ${params.ffa}]
              |  --sp        Perform only a single pulse search [default: ${params.sp }]
              |  --cand      Label given to output files [default: ${params.cand }]
              |  --nharm     Number of harmonics to search [default: ${params.nharm }]
@@ -47,25 +53,15 @@ if ( params.help ) {
     exit(0)
 }
 
-if ( params.fits_file ) {
-    fits_file = Channel.fromPath( "${params.fits_file}", checkIfExists: true ).flatten()
-    //nfiles = new File("${params.fits_file}").listFiles().findAll { it.name ==~ /.*fits/ }.size()
-    fits_file.view( it -> "Running search on ${it}" )
-}
-else {
-    println("No fits file given, please use --fits_file. Exiting.")
-    exit(0)
-}
-
 include { pulsar_search; single_pulse_search } from './pulsar_search_module'
 include { classifier                         } from './classifier_module'
 
 workflow {
     if ( params.sp ) {
-        single_pulse_search( fits_file.map{ it -> [ params.cand + '_' + it.baseName.split("_ch")[0], it ] } )
+        single_pulse_search( [params.obsid, params.fits_dir] )
     }
     else {
-        pulsar_search( fits_file.map{ it -> [ params.cand + '_' + it.baseName.split("_ch")[0], it ] } )
-        classifier( pulsar_search.out )
+        pulsar_search( [params.obsid, params.fits_dir] )
+        //classifier( pulsar_search.out )
     }
 }

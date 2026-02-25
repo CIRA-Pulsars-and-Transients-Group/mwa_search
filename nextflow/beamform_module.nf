@@ -1,69 +1,95 @@
 
 // Set up beamformer output types
-bf_out = " -p "
+bf_out = " -R NONE -U 0,0 -O -X --smart "
 if ( params.summed ) {
-    bf_out = bf_out + "-s "
+    bf_out = " -N 1" + bf_out
 }
-if ( params.incoh ) {
-    bf_out = bf_out + "-i "
+if ( params.ipfb ) {
+    bf_out = " -v" + bf_out
+    params.outfile = "vdif"
+}
+else {
+    bf_out = " -p" + bf_out
+    params.outfile = "fits"
+}
+if ( params.downsamp > 1 ) {
+   bf_out = " -D ${params.downsamp}" + bf_out
+}
+if (file(params.flagged_tiles).exists()) {
+   bf_out = " -F ${params.flagged_tiles}" + bf_out
+}
+
+def vcsbeam_time(dur) {
+    full_time = (int) ( Float.valueOf(dur) * Float.valueOf(params.bf_time_per_sec) )
+    return "${full_time}s"
 }
 
 
 process beamform_setup {
+    label 'python'
+
     output:
     path "${params.obsid}_beg_end_dur.txt",  emit: beg_end_dur
     path "${params.obsid}_channels.txt", emit: channels
-    path "${params.obsid}_utc.txt",      emit: utc
+    path "${params.obsid}_pointings.txt", emit: pointings
 
     """
     #!/usr/bin/env python
+    import sys
     import csv
     import numpy as np
 
-    from vcstools.metadb_utils import obs_max_min, get_channels, ensure_metafits
-    from vcstools.general_utils import gps_to_utc, mdir, create_link
+    from mwa_search.metafits_utils import load_metafits_context, obs_max_min, mdir
 
-    # Work out begin and end time of obs
-    if "${params.all}" == "true":
-        beg, end = obs_max_min(${params.obsid})
-    else:
-        beg = ${params.begin}
-        end = ${params.end}
-    dur = end - beg + 1
-    with open("${params.obsid}_beg_end_dur.txt", "w") as outfile:
-        spamwriter = csv.writer(outfile, delimiter=',')
-        spamwriter.writerow([beg, end, dur])
-
-    # Find the channels
-    channels = get_channels(${params.obsid})
-    # Reorder channels to handle the order switch at 128
-    channels = np.array(channels, dtype=np.int)
-    hichans = [c for c in channels if c>128]
-    lochans = [c for c in channels if c<=128]
-    lochans.extend(list(reversed(hichans)))
-    ordered_channels = lochans
-    with open("${params.obsid}_channels.txt", "w") as outfile:
-        spamwriter = csv.writer(outfile, delimiter=',')
-        for gpubox, chan in enumerate(ordered_channels, 1):
-            spamwriter.writerow([chan, "{:0>3}".format(gpubox)])
-
-    # Ensure the metafits files is there
-    ensure_metafits(
+    # Load metafits context for future use
+    context = load_metafits_context(
         "${params.vcsdir}/${params.obsid}",
         "${params.obsid}",
-        "${params.obsid}_metafits_ppds.fits",
+        "${params.obsid}.metafits",
     )
 
-    # Covert gps time to utc
-    with open("${params.obsid}_utc.txt", "w") as outfile:
+    # Get the channel numbers
+    channels = np.array([c.rec_chan_number for c in context.metafits_coarse_chans])
+
+    # Work out begin and end time of observation available on disk
+    beg, end = obs_max_min("${params.vcsdir}/${params.obsid}/combined", channels[0])
+    if not "${params.all}" == "true":
+        beg = np.max([int("${params.begin}"), beg])
+        end = np.min([int("${params.end}"), end])
+    dur = end - beg + 1
+    if dur < 0:
+        print("negative duration")
+        sys.exit(0)
+
+    with open("${params.obsid}_channels.txt", "w") as outfile:
         spamwriter = csv.writer(outfile, delimiter=',')
-        spamwriter.writerow([gps_to_utc(beg)])
+        spamwriter.writerow([channels[0]])
 
     # Make sure all the required directories are made
-    mdir("${params.vcsdir}/${params.obsid}", "Data")
-    mdir("${params.vcsdir}/${params.obsid}", "Products")
-    mdir("${params.vcsdir}/batch", "Batch")
-    mdir("${params.vcsdir}/${params.obsid}/pointings", "Pointings")
+    mdir("${params.vcsdir}/${params.obsid}", "Data", ${params.gid})
+    mdir("${params.vcsdir}/${params.obsid}", "Products", ${params.gid})
+    mdir("${params.vcsdir}/batch", "Batch", ${params.gid})
+    mdir("${params.vcsdir}/${params.obsid}/pointings", "Pointings", ${params.gid})
+
+    with open("${params.pointing_file}") as infile:
+        pointings = infile.readlines()
+    npoints = len(pointings)
+    with open("${params.obsid}_pointings.txt", "w", newline='') as outfile:
+        spamwriter = csv.writer(outfile, delimiter=',')
+        for p in pointings:
+            rah, ram, ras = p.split()[0].split(":")
+            dech, decm, decs = p.split()[1].split(":")
+            ras = np.round(float(ras), 2)
+            decs = np.round(float(decs), 2)
+            ra = ':'.join([rah, ram, format(ras, "05.2f")])
+            dec = ':'.join([dech, decm, format(decs, "05.2f")])
+            pointing_dir = '_'.join([ra, dec])
+            mdir(f"${params.vcsdir}/${params.obsid}/pointings/{pointing_dir}", "Pointing Directory", ${params.gid})
+            spamwriter.writerow([pointing_dir])
+    
+    with open("${params.obsid}_beg_end_dur.txt", "w") as outfile:
+        spamwriter = csv.writer(outfile, delimiter=',')
+        spamwriter.writerow([beg, end, dur, npoints])
     """
 }
 
@@ -72,7 +98,7 @@ process combined_data_check {
     params.no_combined_check == false
 
     input:
-    tuple val(begin), val(end), val(dur)
+    tuple val(begin), val(end), val(dur), val(npoints)
 
     """
     #!/usr/bin/env python
@@ -96,97 +122,28 @@ process make_beam {
     label 'gpu'
     label 'vcsbeam'
 
-    time "${ task.attempt * ( Float.valueOf(dur) * ( params.bm_read + params.bm_cal + points.size() * ( params.bm_beam + params.bm_write ) ) + 200 ) * 1.2 }s"
-    errorStrategy 'retry'
-    maxRetries 2
+    time { vcsbeam_time(dur) }
+    errorStrategy 'terminate'
+    maxRetries 0
     maxForks params.max_gpu_jobs
 
     input:
-    tuple val(utc), val(begin), val(end), val(dur)
-    tuple val(channel_id), val(gpubox), val(points)
-
-    output:
-    tuple val(channel_id), val(points), path("*fits")
+    tuple val(begin), val(end), val(dur), val(npoints)
+    tuple val(channel_id)
+    path(pointings)
 
     """
-    if ${params.offringa}; then
-        DI_file="calibration_solution.bin"
-        jones_option="-O ${params.didir}/calibration_solution.bin -C ${gpubox.toInteger() - 1}"
-    else
-        jones_option="-J ${params.didir}/DI_JonesMatrices_node${gpubox}.dat"
-    fi
-
-    srun make_beam -o ${params.obsid} -b ${begin} -e ${end} -a 128 -n 128 \
--f ${channel_id} \${jones_option} \
--d ${params.vcsdir}/${params.obsid}/combined -P ${points.join(",").replaceAll(~/\s/,"")} \
--r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
-${bf_out} -t 6000 -F ${params.didir}/flagged_tiles.txt  -z ${utc}
-    mv */*fits .
-    """
-}
-
-
-process make_beam_ipfb {
-    label 'gpu'
-    label 'vcsbeam'
-    publishDir "${params.vcsdir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*hdr"
-    publishDir "${params.vcsdir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits, pattern: "*vdif"
-
-    time "${ task.attempt * ( Float.valueOf(dur) * ( params.bm_read + params.bm_cal * ( params.bm_beam + params.bm_write ) ) + 200 ) * 1.2 }s"
-    errorStrategy 'retry'
-    maxRetries 2
-    maxForks params.max_gpu_jobs
-
-    when:
-    point != " " //Don't run if blank pointing given
-
-    input:
-    tuple val(utc), val(begin), val(end), val(dur)
-    tuple val(channel_id), val(gpubox), val(point)
-
-    output:
-    tuple val(channel_id), val(point), path("*fits"), emit: fits
-    tuple val(channel_id), val(point), path("*hdr"), path("*vdif"),  emit: vdif
-
-    """
-    if ${params.offringa}; then
-        DI_file="calibration_solution.bin"
-        jones_option="-O ${params.didir}/calibration_solution.bin -C ${gpubox.toInteger() - 1}"
-    else
-        jones_option="-J ${params.didir}/DI_JonesMatrices_node${gpubox}.dat"
-    fi
-
-    if ${params.publish_fits}; then
-        mkdir -p -m 771 ${params.vcsdir}/${params.obsid}/pointings/${point}
-    fi
-    
-    srun make_beam -o ${params.obsid} -b ${begin} -e ${end} -a 128 -n 128 \
--f ${channel_id} \${jones_option} \
--d ${params.vcsdir}/${params.obsid}/combined -P ${point} \
--r 10000 -m ${params.vcsdir}/${params.obsid}/${params.obsid}_metafits_ppds.fits \
--p -v -t 6000 -F ${params.didir}/flagged_tiles.txt -z ${utc} -g 11
-    mv */*fits .
-    """
-}
-
-process splice {
-    label 'cpu'
-    label 'vcstools'
-
-    publishDir "${params.vcsdir}/${params.obsid}/pointings/${point}", mode: 'copy', enabled: params.publish_fits
-    time '3h'
-    maxForks 300
-    errorStrategy 'retry'
-    maxRetries 1
-
-    input:
-    tuple val(chans), val(point), path(unspliced)
-
-    output:
-    tuple val(point), path("${params.obsid}*fits")
-
-    """
-    splice_wrapper.py -o ${params.obsid} -c ${chans.join(" ")}
+    srun ${params.singularity_bf_cmd} make_mwa_tied_array_beam \
+        -m ${params.vcsdir}/${params.obsid}/${params.obsid}.metafits \
+        -b ${begin} \
+        -T ${dur} \
+        -f ${channel_id} \
+        -d ${params.vcsdir}/${params.obsid}/combined \
+        -P ${params.pointing_file} \
+        -C ${params.didir}/*hyperdrive_solutions.bin \
+        -c ${params.metafits_dir}/${params.calid}.metafits \
+        ${bf_out}
+    for f in `cat ${pointings} | tr -d '\r'` ; do mv ./*\${f}*.fits ${params.vcsdir}/${params.obsid}/pointings/\$f/; done
     """
 }
 
@@ -198,59 +155,32 @@ workflow pre_beamform {
         // Grab outputs from the CSVs
         beg_end_dur = beamform_setup.out.beg_end_dur.splitCsv()
         channels    = beamform_setup.out.channels.splitCsv()
-        utc         = beamform_setup.out.utc.splitCsv().flatten()
+        pointings   = beamform_setup.out.pointings
 
         combined_data_check(beamform_setup.out.beg_end_dur.splitCsv())
     emit:
         // Combine all the constant metadata and make it a value channel (with collect) so it will be used for each job
         // Format:  [ utc, begin(GPS), end(GPS), duration(s) ]
-        utc_beg_end_dur = utc.concat( beg_end_dur ).collect()
-        // Channel pair in the format [ channel_id, gpubox_id ]
+        beg_end_dur
+        // Channels in the format [ channel_id ]
         channels
+        pointings
 }
 
 
 workflow beamform {
     // Beamforms MWA voltage data
     take:
-        // Metadata in the format [ utc, begin(GPS), end(GPS), duration(s) ]
-        utc_beg_end_dur
-        // Channel pair in the format [ channel_id, gpubox_id ]
-        channels
-        // List of pointings in the format HH:MM:SS_+-DD:MM:SS
+        // Metadata in the format [ begin(GPS), end(GPS), duration(s) ]
+        beg_end_dur
+        // The index of the first channel
+        first_channel
         pointings
     main:
         // Combine the each channel with each pointing (group) so you make a job for each combination
-        chan_point = channels.combine( pointings.flatten().collate( params.max_pointings ).map{ [ it ] } )
         make_beam(
-            utc_beg_end_dur,
-            chan_point
+            beg_end_dur,
+            first_channel,
+            pointings,
         )
-        // Make sure the pointings and fits are in the same order then transpose to "flatten" out multiple pointings then group by the pointing for splicing
-        splice( make_beam.out.map{ chan, pointings, fits -> [ chan, pointings.sort(), [fits].flatten().findAll{ it != null }.sort() ] }.transpose().groupTuple( by: 1, size: 24 ) )
-    emit:
-        splice.out // [ pointing, fits_file ]
-}
-
-workflow beamform_ipfb {
-    // Beamforms MWA voltage data and performs and Inverse Polyphase Filter Bank to increase time resolution
-    take:
-        // Metadata in the format [ utc, begin(GPS), end(GPS), duration(s) ]
-        utc_beg_end_dur
-        // Channel pair in the format [ channel_id, gpubox_id ]
-        channels
-        // List of pointings in the format HH:MM:SS_+-DD:MM:SS
-        pointings
-    main:
-        // Combine the each channel with each pointing so you make a job for each combination
-        chan_point = channels.combine( pointings.flatten().map{ [ it ] } )
-        make_beam_ipfb(
-            utc_beg_end_dur,
-            chan_point
-        )
-        // Group by the pointing for splicing
-        splice( make_beam_ipfb.out.fits.groupTuple( by: 1, size: 24 ) )
-    emit:
-        fits = splice.out // [ pointing, fits_file ]
-        vdif = make_beam_ipfb.out.vdif // [ channel_id, point, hdr, vdif ]
-}
+} 
