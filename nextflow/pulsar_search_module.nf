@@ -511,7 +511,7 @@ process run_ffa {
     tuple val(name), path(ffa), val(dur)
 
     output:
-    tuple val(name), path("*peaks.csv"), path("*clusters.csv"), path("candidate_*.*")
+    tuple val(name), path("*peaks.csv"), path("*clusters.csv"), path("candidate_*.json"), path("candidate_*.png")
 
     shell:
     '''
@@ -528,7 +528,10 @@ process run_ffa {
         touch peaks.csv
     fi
     if [ ! -f candidate_0000.json ]; then
-        touch candidate_0000.json
+        touch candidate_fake.json
+    fi
+    if [ ! -f candidate_0000.png ]; then
+        touch candidate_fake.png
     fi
     if [ ! -f clusters.csv ]; then
         touch clusters.csv
@@ -554,7 +557,7 @@ process run_ffa_dat {
     tuple val(name), path(dat), path(ffa), val(dur)
 
     output:
-    tuple val(name), path("*peaks.csv"), path("*clusters.csv"), path("candidate_*.*")
+    tuple val(name), path("*peaks.csv"), path("*clusters.csv"), path("candidate_*.json"), path("candidate_*.png")
 
     shell:
     '''
@@ -567,17 +570,48 @@ process run_ffa_dat {
         touch peaks.csv
     fi
     if [ ! -f candidate_0000.json ]; then
-        touch candidate_0000.json
+        touch candidate_fake.json
+    fi
+    if [ ! -f candidate_0000.png ]; then
+        touch candidate_fake.png
     fi
     if [ ! -f clusters.csv ]; then
         touch clusters.csv
     fi
     if !{params.delete_files}; then
         rm *.inf
-    #    for i in \$(ls *.dat); do
-    #        source_file=\$(ls -l \$i | awk '{print \$NF}')
-    #        rm \$source_file \${i%.dat}.inf
-    #    done
+    fi
+    '''
+}
+
+
+process create_fake_ffa_files {
+    label 'cpu'
+
+    time "1h"
+    memory '1840 MB'
+    maxRetries 1
+    errorStrategy 'retry'
+
+    input:
+    tuple val(name), path(ffa)
+
+    output:
+    tuple val(name), path("*peaks.csv"), path("*clusters.csv"), path("candidate_*.json"), path("candidate_*.png")
+
+    shell:
+    '''
+    if [ ! -f peaks.csv ]; then
+        touch peaks.csv
+    fi
+    if [ ! -f candidate_0000.json ]; then
+        touch candidate_fake.json
+    fi
+    if [ ! -f candidate_0000.png ]; then
+        touch candidate_fake.png
+    fi
+    if [ ! -f clusters.csv ]; then
+        touch clusters.csv
     fi
     '''
 }
@@ -801,6 +835,32 @@ process prepfold_multicpu {
 }
 
 
+process run_multi_classifier {
+    label 'multi'
+
+    time "${ task.attempt * params.multi_scale }s"
+    maxRetries 1
+    errorStrategy 'retry'
+    publishDir params.out_dir, mode: 'copy'
+
+    input:
+    tuple val(name), path(pfd), path(ffa_json)
+
+    output:
+    tuple val(name), path("Multi_finetune_mwa_weight_prediction.txt")
+
+    shell:
+    '''
+    if [ -f candidate_fake.json ]; then
+        rm candidate_fake.json
+    fi
+    python ${params.multi_base}/Multi/predict.py --ckpt \
+    ${params.multi_base}/Multi/trained_model/finetune_mwa_weight.pth \
+    --pfd_dir . --outfile Multi_finetune_mwa_weight_prediction.txt --use_prob --chunk_size 256
+    '''
+}
+
+
 process cleanup {
     label 'cpu'
     label 'cleanup'
@@ -926,6 +986,12 @@ workflow pulsar_search {
             if ( params.ffa ) {
                 ffa_input = search_dd_only.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, dur, dat, inf, ffa -> [ key.toString(), dat.unique(), ffa.unique() ] }.combine( name_fits_freq_dur.map{ it[4]} )
                 run_ffa_dat( ffa_input )
+                ffa_output = run_ffa.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, peaks, clusters, json, png -> [ key.toString(), json ] }
+            }
+            else {
+                dummy_input = search_dd_only.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, dur, dat, inf, ffa -> [ key.toString(), ffa.unique() ] }
+                create_fake_ffa_files(dummy_input)
+                ffa_output = run_ffa.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, peaks, clusters, json, png -> [ key.toString(), json ] }
             }
             ch_dat_files = search_dd_only.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ [ it[2] ] }
                 .flatten()
@@ -968,6 +1034,12 @@ workflow pulsar_search {
             if ( params.ffa ) {
                 ffa_input = search_dd_fft_acc.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, accel, inf, sp, cands, ffa -> [ key.toString(), ffa ] }.combine( name_fits_freq_dur.map{ it[4]} )
                 run_ffa( ffa_input )
+                ffa_output = run_ffa.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, peaks, clusters, json, png -> [ key.toString(), json ] }
+            }
+            else {
+                dummy_input = search_dd_only.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, dur, dat, inf, ffa -> [ key.toString(), ffa ] }
+                create_fake_ffa_files( dummy_input )
+                ffa_output = run_ffa.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, peaks, clusters, json, png -> [ key.toString(), json ] }
             }
         }
 
@@ -1005,6 +1077,10 @@ workflow pulsar_search {
                 // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
             prepfold( cands_for_prepfold )
             prepfold_out = prepfold.out
+        }
+        // Run Multi classifier
+        if ( params.run_multi ) {
+            run_multi_classifier( ffa_output.combine{ prepfold_out.map{ [ it[0] ] } } )
         }
         // Combined the grouped single pulse files with the fits files
         //single_pulse_searcher(
