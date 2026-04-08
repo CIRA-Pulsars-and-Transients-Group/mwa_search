@@ -688,7 +688,7 @@ process prepfold {
     tuple val(cand_lines), val(obsid), val(dur), path(cand_tar), path(fits_dir), path(rfifind_mask), path(rfifind_stats)
 
     output:
-    tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png"), optional: true // some PRESTO installs don't make pngs
+    tuple path("*pfd"), path("*bestprof"), path("*ps"), path("*png") // some PRESTO installs don't make pngs
 
     //no mask command currently
     """
@@ -740,6 +740,10 @@ process prepfold {
     -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact \${rfifind_command} ${dedisp_options} ${params.vcsdir}/${obsid}/pointings/${fits_dir}/\${fits_name}*.fits
 
     done
+    if [ -z "$(find . -maxdepth 1 -name "*.txt" -print -quit)" ]; then
+        # create a dummy png if no png files are produced
+        touch dummy_pfd.png
+    fi
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%M:%S") ----------------------------------------------------------------\\n"
     """
 }
@@ -830,6 +834,10 @@ process prepfold_multicpu {
 
     done
     wait
+    if [ -z "$(find . -maxdepth 1 -name "*.txt" -print -quit)" ]; then
+        # create a dummy png if no png files are produced
+        touch dummy_pfd.png
+    fi
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%M:%S") ----------------------------------------------------------------\\n"
     """
 }
