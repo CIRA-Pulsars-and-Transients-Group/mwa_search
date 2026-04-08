@@ -836,6 +836,7 @@ process prepfold_multicpu {
 
 
 process run_multi_classifier {
+    label 'cpu'
     label 'multi'
 
     time "${ task.attempt * params.multi_scale }s"
