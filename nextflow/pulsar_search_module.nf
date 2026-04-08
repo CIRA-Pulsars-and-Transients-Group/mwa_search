@@ -991,7 +991,7 @@ workflow pulsar_search {
             else {
                 dummy_input = search_dd_only.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, dur, dat, inf, ffa -> [ key.toString(), ffa.unique() ] }
                 create_fake_ffa_files(dummy_input)
-                ffa_output = run_ffa.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, peaks, clusters, json, png -> [ key.toString(), json ] }
+                ffa_output = create_fake_ffa_files.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, peaks, clusters, json, png -> [ key.toString(), json ] }
             }
             ch_dat_files = search_dd_only.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ [ it[2] ] }
                 .flatten()
@@ -1039,7 +1039,7 @@ workflow pulsar_search {
             else {
                 dummy_input = search_dd_only.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, dur, dat, inf, ffa -> [ key.toString(), ffa ] }
                 create_fake_ffa_files( dummy_input )
-                ffa_output = run_ffa.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, peaks, clusters, json, png -> [ key.toString(), json ] }
+                ffa_output = create_fake_ffa_files.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ key, peaks, clusters, json, png -> [ key.toString(), json ] }
             }
         }
 
