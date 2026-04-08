@@ -1080,7 +1080,7 @@ workflow pulsar_search {
         }
         // Run Multi classifier
         if ( params.run_multi ) {
-            run_multi_classifier( ffa_output.combine{ prepfold_out.map{ [ it[0] ] } } )
+            run_multi_classifier( ffa_output.combine( prepfold_out.map{ [ it[0] ] } ) )
         }
         // Combined the grouped single pulse files with the fits files
         //single_pulse_searcher(
