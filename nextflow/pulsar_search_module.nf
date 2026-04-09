@@ -740,8 +740,9 @@ process prepfold {
     -pstep 1 -pdstep 2 -npfact \$period_search_n -ndmfact \$ndmfact \${rfifind_command} ${dedisp_options} ${params.vcsdir}/${obsid}/pointings/${fits_dir}/\${fits_name}*.fits
 
     done
-    if [ -z "$(find . -maxdepth 1 -name "*.txt" -print -quit)" ]; then
+    if [ -z "\$(find . -maxdepth 1 -name "*.txt" -print -quit)" ]; then
         # create a dummy png if no png files are produced
+        printf "\\n#Creating fake png file at \$(date +"%Y-%m-%d_%H:%M:%S") ------------------------------------------\\n"
         touch dummy_pfd.png
     fi
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%M:%S") ----------------------------------------------------------------\\n"
@@ -834,8 +835,9 @@ process prepfold_multicpu {
 
     done
     wait
-    if [ -z "$(find . -maxdepth 1 -name "*.txt" -print -quit)" ]; then
+    if [ -z "\$(find . -maxdepth 1 -name "*.txt" -print -quit)" ]; then
         # create a dummy png if no png files are produced
+        printf "\\n#Creating fake png file at \$(date +"%Y-%m-%d_%H:%M:%S") ------------------------------------------\\n"
         touch dummy_pfd.png
     fi
     printf "\\n#Finished at \$(date +"%Y-%m-%d_%H:%M:%S") ----------------------------------------------------------------\\n"
