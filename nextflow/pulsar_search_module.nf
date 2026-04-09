@@ -128,7 +128,7 @@ process ddplan {
         dm_min, dm_max, dm_step, ndm, timeres, downsamp, nsub, total_work_factor = dd_line
         if total_work_factor > ${params.max_work_function}:
             # Ouput a file with just the max_work_function worth of DMs
-            with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{ndm}.txt", "w") as outfile:
+            with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{ndm}_d{downsamp}.txt", "w") as outfile:
                 spamwriter = csv.writer(outfile, delimiter=',')
                 spamwriter.writerow([
                     dm_min,
@@ -150,7 +150,8 @@ process ddplan {
         if wf_sum > ${params.max_work_function}:
             # Ouput file with multiple ddplan lines
             local_dm_steps = int(ndm + np.array(work_function_batch).sum(axis=0)[3])
-            with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{local_dm_steps}.txt", "w") as outfile:
+            local_downsamp = int(np.array(work_function_batch)[0][5])
+            with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{local_dm_steps}_d{local_downsamp}.txt", "w") as outfile:
                 spamwriter = csv.writer(outfile, delimiter=',')
                 for out_line in work_function_batch:
                     spamwriter.writerow(out_line)
@@ -176,7 +177,8 @@ process ddplan {
     # Write final file
     if work_function_batch:
         local_dm_steps = int(np.array(work_function_batch).sum(axis=0)[3])
-        with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{local_dm_steps}.txt", "w") as outfile:
+        local_downsamp = int(np.array(work_function_batch)[0][5])
+        with open(f"DDplan_{wfi:03d}_a{total_dm_steps}_n{local_dm_steps}_d{local_downsamp}.txt", "w") as outfile:
             spamwriter = csv.writer(outfile, delimiter=',')
             for out_line in work_function_batch:
                 spamwriter.writerow(out_line)
@@ -219,7 +221,7 @@ process search_dd_only {
     maxForks params.max_search_jobs
 
     input:
-    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(spectra_per_subint), val(ndms_job), val(ddplans), path(rfifind_mask), path(rfifind_stats)
+    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(spectra_per_subint), val(ndms_job), val(downsamp), val(ddplans), path(rfifind_mask), path(rfifind_stats)
 
     output:
     tuple val(name), val(dur), path("*.dat"), path("*.inf"), path('*ffa.tar')
@@ -408,7 +410,7 @@ process search_dd_fft_acc {
     publishDir params.out_dir, mode: 'copy'
 
     input:
-    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(spectra_per_subint), val(ndms_job), val(ddplans), path(rfifind_mask), path(rfifind_stats)
+    tuple val(obsid), val(name), path(fits_dir), val(freq), val(dur), val(spectra_per_subint), val(ndms_job), val(downsamp), val(ddplans), path(rfifind_mask), path(rfifind_stats)
 
     output:
     tuple val(name), path("*ACCEL_${params.zmax}.tar"), path("*inf.tar"), path("*singlepulse.tar"), path('*cand.tar'), path('*ffa.tar')
@@ -991,7 +993,7 @@ workflow pulsar_search {
             search_dd_only(
                 ddplan.out.transpose()
                 .map { obsid, name, fits, freq, dur, spectra_per_subint, ddplan ->
-                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, spectra_per_subint, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
+                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, spectra_per_subint, ddplan.baseName.split("_n")[-1].split("_a")[0], ddplan.baseName.split("_a")[-1], ddplan.splitCsv() ]
                 }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
             )
             if ( params.ffa ) {
@@ -1031,7 +1033,7 @@ workflow pulsar_search {
             search_dd_fft_acc(
                 ddplan.out.transpose()
                 .map { obsid, name, fits, freq, dur, spectra_per_subint, ddplan ->
-                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, spectra_per_subint, ddplan.baseName.split("_n")[-1], ddplan.splitCsv() ]
+                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, spectra_per_subint, ddplan.baseName.split("_n")[-1].split("_a")[0], ddplan.baseName.split("_a")[-1], ddplan.splitCsv() ]
                 }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
             )
 
