@@ -993,7 +993,7 @@ workflow pulsar_search {
             search_dd_only(
                 ddplan.out.transpose()
                 .map { obsid, name, fits, freq, dur, spectra_per_subint, ddplan ->
-                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, spectra_per_subint, ddplan.baseName.split("_n")[-1].split("_a")[0], ddplan.baseName.split("_a")[-1], ddplan.splitCsv() ]
+                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, spectra_per_subint, ddplan.baseName.split("_n")[-1].split("_d")[0], ddplan.baseName.split("_d")[-1], ddplan.splitCsv() ]
                 }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
             )
             if ( params.ffa ) {
@@ -1033,7 +1033,7 @@ workflow pulsar_search {
             search_dd_fft_acc(
                 ddplan.out.transpose()
                 .map { obsid, name, fits, freq, dur, spectra_per_subint, ddplan ->
-                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, spectra_per_subint, ddplan.baseName.split("_n")[-1].split("_a")[0], ddplan.baseName.split("_a")[-1], ddplan.splitCsv() ]
+                    [ obsid, groupKey(name, ddplan.baseName.split("_n")[0].split("_a")[-1].toInteger() ), fits, freq, dur, spectra_per_subint, ddplan.baseName.split("_n")[-1].split("_d")[0], ddplan.baseName.split("_d")[-1], ddplan.splitCsv() ]
                 }.combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
             )
 
