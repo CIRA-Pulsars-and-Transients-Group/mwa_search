@@ -1087,9 +1087,10 @@ workflow pulsar_search {
                 .combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
                 // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
             prepfold( cands_for_prepfold )
-            prepfold_out = prepfold.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ pfd, bestprof, ps, png -> [ pfd ] }
+            prepfold_out = prepfold.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ pfd, bestprof, ps, png -> [ pfd ] }.flatten()
         }
         // Run Multi classifier
+        prepfold_out.view()
         if ( params.run_multi ) {
             run_multi_classifier( ffa_output.combine( prepfold_out ) )
         }
