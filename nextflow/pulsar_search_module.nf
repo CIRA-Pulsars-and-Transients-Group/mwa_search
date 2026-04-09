@@ -1075,7 +1075,7 @@ workflow pulsar_search {
                 .combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
                 // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
             prepfold_multicpu( cands_for_prepfold )
-            prepfold_out = prepfold_multicpu.out
+            prepfold_out = prepfold_multicpu.transpose( remainder: true ).groupTuple( remainder: true ).map{ pfd, bestprof, ps, png -> [ pfd ] }.collect()
         }
         else {
             cands_for_prepfold = name_fits_freq_dur.combine( accel_inf_cands ).map{it -> [it[-2], it[0], Float.valueOf(it[4]), it[-1], it[2]] }
@@ -1087,12 +1087,11 @@ workflow pulsar_search {
                 .combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
                 // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
             prepfold( cands_for_prepfold )
-            prepfold_out = prepfold.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ pfd, bestprof, ps, png -> [ pfd ] }.flatten()
+            prepfold_out = prepfold.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ pfd, bestprof, ps, png -> [ pfd ] }.collect()
         }
         // Run Multi classifier
-        prepfold_out.view()
         if ( params.run_multi ) {
-            run_multi_classifier( ffa_output.combine( prepfold_out ) )
+            run_multi_classifier( ffa_output.combine(prepfold_out.map{ pfd -> [pfd ] } ) )
         }
         // Combined the grouped single pulse files with the fits files
         //single_pulse_searcher(
