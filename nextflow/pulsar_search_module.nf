@@ -865,8 +865,8 @@ process run_multi_classifier {
     if [ -f candidate_fake.json ]; then
         rm candidate_fake.json
     fi
-    python ${params.multi_base}/Multi/predict.py --ckpt \
-    ${params.multi_base}/Multi/trained_model/finetune_mwa_weight.pth \
+    python !{params.multi_base}/Multi/predict.py --ckpt \
+    !{params.multi_base}/Multi/trained_model/finetune_mwa_weight.pth \
     --pfd_dir . --outfile Multi_finetune_mwa_weight_prediction.txt --use_prob --chunk_size 256
     '''
 }
@@ -1087,11 +1087,12 @@ workflow pulsar_search {
                 .combine( rfifind.out.map{ [ it[-2], it[-1] ] } )
                 // [ name, fits_files, dur, cand_line, cand_inf, cand_file ]
             prepfold( cands_for_prepfold )
-            prepfold_out = prepfold.out
+            prepfold_out = prepfold.out.transpose( remainder: true ).groupTuple( remainder: true ).map{ pfd, bestprof, ps, png -> [ pfd ] }
         }
         // Run Multi classifier
         if ( params.run_multi ) {
-            run_multi_classifier( ffa_output.combine( prepfold_out.map{ [ it[0] ] } ) )
+            transpose( remainder: true ).groupTuple( remainder: true ).map{ pfd, bestprof, ps, png -> [ pfd ] }
+            run_multi_classifier( ffa_output.combine( prepfold_out )
         }
         // Combined the grouped single pulse files with the fits files
         //single_pulse_searcher(
