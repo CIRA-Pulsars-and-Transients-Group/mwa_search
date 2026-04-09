@@ -1091,7 +1091,6 @@ workflow pulsar_search {
         }
         // Run Multi classifier
         if ( params.run_multi ) {
-            transpose( remainder: true ).groupTuple( remainder: true ).map{ pfd, bestprof, ps, png -> [ pfd ] }
             run_multi_classifier( ffa_output.combine( prepfold_out )
         }
         // Combined the grouped single pulse files with the fits files
