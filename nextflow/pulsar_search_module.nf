@@ -851,6 +851,8 @@ process run_multi_classifier {
     label 'cpu'
     label 'multi'
 
+    scratch true
+    stageInMode 'copy'
     time "${ task.attempt * params.multi_scale }s"
     maxRetries 1
     errorStrategy 'retry'
